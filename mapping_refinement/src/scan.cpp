@@ -19,6 +19,11 @@ scan::scan(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vector3f& origi
 scan::scan(const std::string& pcdname, const std::string& tname)
 {
     red = green = blue = NULL;
+    initialize_from_files(pcdname, tname);
+}
+
+void scan::initialize_from_files(const std::string& pcdname, const std::string& tname)
+{
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
     if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(pcdname, cloud) == -1) //* load the file
@@ -26,14 +31,14 @@ scan::scan(const std::string& pcdname, const std::string& tname)
         ROS_ERROR("Couldn't read file %s", pcdname.c_str());
         return;
     }
-    
+
     std::ifstream tfile;
     tfile.open(tname.c_str());
     if (!tfile.is_open()) {
         ROS_ERROR("Couldn't read file %s", tname.c_str());
         return;
     }
-    
+
     Vector3f eorigin;
     Matrix3f ebasis;
     Matrix3f K;
@@ -133,6 +138,12 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
     camera_cone(confining_points);
 }
 
+void scan::set_transform(const Eigen::Matrix3f& R, const Eigen::Vector3f& t)
+{
+    basis = R;
+    origin = t;
+}
+
 void scan::transform(const Matrix3f& R, const Vector3f& t)
 {
     basis = basis*R; // add to total rotation
@@ -201,7 +212,11 @@ void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
     int pheight = maxy - miny;
 
     std::cout << "Cropped width: " << pwidth << ", height: " << pheight << std::endl;
-    
+    if (maxx <= minx || maxy <= miny) {
+        std::cout << "Scans are not overlapping!" << std::endl;
+        exit(0);
+    }
+
     MatrixXf copy = other.points;
     size_t n = copy.cols();
     copy = R*copy;

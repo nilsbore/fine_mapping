@@ -69,18 +69,20 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-include_directories(include ${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
+include_directories(include /opt/ros/hydro/include/ ${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
+link_directories(/opt/ros/hydro/lib/)
 
 ## Declare a cpp library
-add_library(scan src/scan.cpp)
-add_library(fine_registration src/fine_registration.cpp)
-add_library(asynch_visualizer src/asynch_visualizer.cpp)
-#add_library(fine_edge src/fine_edge.cpp)
-#add_library(fine_vertex src/fine_vertex.cpp)
+add_library(scan src/scan.cpp include/scan.h)
+add_library(fine_registration src/fine_registration.cpp include/fine_registration.h)
+add_library(asynch_visualizer src/asynch_visualizer.cpp include/asynch_visualizer.h)
+add_library(fine_edge src/fine_edge.cpp include/fine_edge.h)
+add_library(fine_vertex src/fine_vertex.cpp include/fine_vertex.h)
 
 ## Declare a cpp executable
 add_executable(save_scan src/save_scan.cpp)
 add_executable(test_projection src/test_projection.cpp)
+add_executable(test_mapping src/test_mapping.cpp)
 add_executable(reproject_scans src/reproject_scans.cpp)
 
 ## Add cmake target dependencies of the executable/library
@@ -111,11 +113,39 @@ target_link_libraries(asynch_visualizer
   ${PCL_LIBRARIES}
 )
 
+target_link_libraries(fine_vertex
+  ${catkin_LIBRARIES}
+  scan
+  g2o_core
+  g2o_types_slam3d
+)
+
+target_link_libraries(fine_edge
+  ${catkin_LIBRARIES}
+  fine_registration
+  fine_vertex
+  g2o_core
+  g2o_types_slam3d
+)
+
 target_link_libraries(test_projection
   ${catkin_LIBRARIES}
   scan
   fine_registration
   asynch_visualizer
+)
+
+target_link_libraries(test_mapping
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  fine_registration
+  fine_vertex
+  fine_edge
+  asynch_visualizer
+  g2o_core
+  g2o_types_slam3d
+  g2o_solver_csparse
+  g2o_stuff
 )
 
 target_link_libraries(reproject_scans
@@ -125,16 +155,6 @@ target_link_libraries(reproject_scans
   fine_registration
   asynch_visualizer
 )
-
-#target_link_libraries(fine_edge
-#  ${catkin_LIBRARIES}
-#  fine_registration
-#)
-
-#target_link_libraries(fine_vertex
-#  ${catkin_LIBRARIES}
-#  scan
-#)
 
 #############
 ## Install ##

@@ -19,8 +19,8 @@ int main(int argc, char** argv)
     Eigen::Matrix3f R;
     Eigen::Vector3f t;
     std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
-    clouds.resize(22);
-    for (size_t i = 0; i < 22; ++i) {
+    clouds.resize(34);
+    for (size_t i = 0; i < 34; ++i) {
         std::stringstream ss;
         ss << std::setfill('0') << std::setw(6) << i;
         scans.push_back(folder + std::string("/shot") + ss.str() + std::string(".pcd"));
@@ -37,6 +37,7 @@ int main(int argc, char** argv)
         viewer->addPointCloud<pcl::PointXYZRGB>(clouds[i], rgb, std::string("cloud") + ss.str());
         viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
                                                  1, std::string("cloud") + ss.str());
+        std::cout << "Cloud: " << i << std::endl;
     }
     while (!viewer->wasStopped()) {
         viewer->spinOnce(100);

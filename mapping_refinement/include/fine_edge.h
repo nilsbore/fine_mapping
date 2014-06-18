@@ -12,9 +12,9 @@
 //#include <Eigen/Dense>
 //#include "g2o/types/slam3d/isometry3d_mappings.h"
 
-class fine_edge : public fine_registration, public g2o::BaseBinaryEdge<6, Eigen::Matrix<double, 6, 1>, fine_vertex, fine_vertex> {
+class fine_edge : public fine_registration, public g2o::BaseBinaryEdge<1, Eigen::Isometry3d, fine_vertex, fine_vertex> {
 public:
-    typedef Eigen::Matrix<double, 6, 1> pos_type;
+    //typedef Eigen::Matrix<double, 6, 1> pos_type;
 
     /*void setMeasurement(const pos_type& m) {
         _measurement = m;
@@ -32,6 +32,8 @@ public:
         v = g2o::internal::toVectorQT(_measurement);
         return true;
     }*/
+    bool read(std::istream& is);
+    bool write(std::ostream& os) const;
 
     void computeError();
 
@@ -41,7 +43,8 @@ public:
 
     bool setMeasurementFromState();
 
-    fine_edge();
+    fine_edge(fine_vertex& f1, fine_vertex& f2);
+    //fine_edge() {}
 
 //    virtual double initialEstimatePossible(const OptimizableGraph::VertexSet& /*from*/,
 //                                           OptimizableGraph::Vertex* /*to*/) {

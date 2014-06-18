@@ -21,14 +21,17 @@ protected:
     void initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Eigen::Vector3f& origin, const Eigen::Matrix3f& basis, const Eigen::Matrix3f& K);
     void camera_cone(Eigen::ArrayXXf& confining_points) const;
 public:
+    void set_transform(const Eigen::Matrix3f& R, const Eigen::Vector3f& t);
     void get_transform(Eigen::Matrix3f& R, Eigen::Vector3f& t) { R = basis; t = origin; }
     void transform(const Eigen::Matrix3f& R, const Eigen::Vector3f& t);
     Eigen::Vector3f reproject_point(int x, int y, float depth) const;
     void submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_t w, size_t h);
     bool is_behind(const scan& other) const;
     void project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other) const;
+    void initialize_from_files(const std::string& pcdname, const std::string& tname);
     scan(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Eigen::Vector3f& origin, const Eigen::Matrix3f& basis, const Eigen::Matrix3f& K);
     scan(const std::string& pcdname, const std::string& tname);
+    scan() { red = green = blue = NULL; }
     ~scan();
 };
 #endif // SCAN_H

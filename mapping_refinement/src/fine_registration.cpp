@@ -94,7 +94,7 @@ void fine_registration::compute_transform(Matrix3f& R, Vector3f& t, const cv::Ma
             p2 = scan1.reproject_point(x+fxy.x, y+fxy.y, z2);
             //delta = 0.0005*Vector3f(fxy.x, fxy.y, 0.0*diff);
             x1.col(counter) = p1;
-            x2.col(counter) = p1 + 0.5*(p2 - p1);//point + delta;
+            x2.col(counter) = p1 + 0.9*(p2 - p1);//point + delta;
 
             ++counter;
         }
@@ -113,7 +113,7 @@ void fine_registration::compute_transform(Matrix3f& R, Vector3f& t, const cv::Ma
     getTransformationFromCorrelation(x1, x1m, x2, x2m, transformation);
     R = transformation.topLeftCorner(3, 3);
     t = transformation.block(0, 3, 3, 1);
-    std::cout << "Mean translation: " << (x2m-x1m).transpose() << std::endl;
+    //std::cout << "Mean translation: " << (x2m-x1m).transpose() << std::endl;
 }
 
 void fine_registration::compute_jacobian(VectorXf& jacobian, const cv::Mat& depth2, const cv::Mat& depth1,
@@ -150,6 +150,7 @@ float fine_registration::compute_error(const cv::Mat& depth2, const cv::Mat& dep
 {
     float rtn = 0;
     float val = 0;
+    float counter = 0;
     for (int y = 0; y < depth2.rows; ++y) {
         for (int x = 0; x < depth2.cols; ++x) {
             if (invalid.at<bool>(y, x)) {
@@ -157,9 +158,10 @@ float fine_registration::compute_error(const cv::Mat& depth2, const cv::Mat& dep
             }
             val = depth2.at<float>(y, x) - depth1.at<float>(y, x);
             rtn += val*val;
+            counter += 1.0;
         }
     }
-    return rtn;
+    return rtn/counter;
 }
 
 void fine_registration::step(Matrix3f& R, Vector3f& t)
@@ -167,7 +169,7 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::Mat depth2, rgb2;
     cv::Mat depth1, rgb1;
     size_t ox, oy;
-    bool behind = false;//scan1.is_behind(scan2);
+    bool behind = scan1.is_behind(scan2);
     //Matrix3f R1, R2;
     //Vector3f t1, t2;
     if (behind) {
@@ -253,7 +255,7 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     //cv::imshow("DepthFlow", cflow);
     //cv::waitKey(10);
 
-    VectorXf jacobian;
+    /*VectorXf jacobian;
     Vector3f trans;
     compute_jacobian(jacobian, depth2, depth1, flow, binary, trans);
 
@@ -267,12 +269,12 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     Matrix3f Ry = AngleAxisf(delta*jacobian(4), Vector3f::UnitY()).matrix();
     Matrix3f Rz = AngleAxisf(delta*jacobian(5), Vector3f::UnitZ()).matrix();
     R = Rx*Ry*Rz;
-    R.setIdentity();
+    R.setIdentity();*/
     //Eigen::Matrix3f R1;
     //Eigen::Vector3f t1;
     //scan1.get_transform(R1, t1);
     //t = delta*jacobian.head<3>();
-    t = 0.0005*trans;//delta*jacobian.head<3>().transpose();
+    //t = 0.0005*trans;//delta*jacobian.head<3>().transpose();
     compute_transform(R, t, depth2, depth1, flow, binary);
 
     int midx = colorImage.cols/2;
@@ -283,14 +285,14 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::imshow("Flow", colorImage);
     cv::waitKey(10);
 
-    std::cout << "R: \n" << R << std::endl;
+    //std::cout << "R: \n" << R << std::endl;
     Matrix3f Rt = R.transpose();
     if (!behind) {
         std::cout << "S2 was behind S1!" << std::endl;
         t = -Rt*t;
         R = Rt;
     }
-    std::cout << "R.determinant(): " << Rt*R << std::endl;
+    //std::cout << "R.determinant(): " << Rt*R << std::endl;
     //R.setIdentity();
     last_error = compute_error(depth2, depth1, binary);
 }
