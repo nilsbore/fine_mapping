@@ -16,12 +16,14 @@ protected:
     int iterations; // number of iterations the algorithm does at each pyramid level.
     int poly_n; // size of the pixel neighborhood used to find polynomial expansion in each pixel; larger values mean that the image will be approximated with smoother surfaces, yielding more robust algorithm and more blurred motion field, typically poly_n =5 or 7.
     double poly_sigma; // standard deviation of the Gaussian that is used to smooth derivatives used as a basis for the polynomial expansion; for poly_n=5, you can set poly_sigma=1.1, for poly_n=7, a good value would be poly_sigma=1.5.
-    void compute_transform_jacobian(Eigen::MatrixXf &J, const Eigen::Vector3f& x) const;
     float compute_error(const cv::Mat& depth, const cv::Mat& wdepth, const cv::Mat& invalid) const;
-    void compute_jacobian(Eigen::VectorXf& jacobian, const cv::Mat& depth, const cv::Mat& wdepth,
-                          const cv::Mat& flow, const cv::Mat& invalid, Eigen::Vector3f& trans) const;
     void compute_transform(Eigen::Matrix3f &R, Eigen::Vector3f &t, const cv::Mat& depth, const cv::Mat& wdepth,
                            const cv::Mat& flow, const cv::Mat& invalid) const;
+    static void get_transformation_from_correlation(const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>& cloud_src_demean,
+                                                    const Eigen::Vector3f& centroid_src,
+                                                    const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>& cloud_tgt_demean,
+                                                    const Eigen::Vector3f& centroid_tgt,
+                                                    Eigen::Matrix4f& transformation_matrix);
 public:
     float error() const { return last_error; }
     void step(Eigen::Matrix3f& R, Eigen::Vector3f& t);

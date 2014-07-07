@@ -20,26 +20,13 @@ static void drawOptFlowMap(const cv::Mat& flow, cv::Mat& cflowmap, cv::Mat& inva
     }
 }
 
-void fine_registration::compute_transform_jacobian(MatrixXf& J, const Vector3f& x) const
-{
-    J.resize(3, 6);
-    J.block<3, 3>(0, 0).setIdentity();
-    // we rotate the cloud between computing the derivatives so the
-    // rotations are in fact zero every time
-    J(0, 4) = x(2);
-    J(0, 5) = -x(1);
-    J(1, 3) = -x(2);
-    J(1, 5) = x(0);
-    J(2, 3) = x(1);
-    J(2, 4) = -x(0);
-}
-
-void getTransformationFromCorrelation(
-        const Matrix<float, Eigen::Dynamic, Eigen::Dynamic> &cloud_src_demean,
-        const Vector3f &centroid_src,
-        const Matrix<float, Eigen::Dynamic, Eigen::Dynamic> &cloud_tgt_demean,
-        const Vector3f &centroid_tgt,
-        Matrix4f &transformation_matrix)
+// shamelessly stolen from pcl
+void fine_registration::get_transformation_from_correlation(
+        const Matrix<float, Dynamic, Dynamic>& cloud_src_demean,
+        const Vector3f& centroid_src,
+        const Matrix<float, Dynamic, Dynamic>& cloud_tgt_demean,
+        const Vector3f& centroid_tgt,
+        Matrix4f& transformation_matrix)
 {
     transformation_matrix.setIdentity();
 
@@ -52,8 +39,7 @@ void getTransformationFromCorrelation(
     Matrix3f v = svd.matrixV();
 
     // Compute R = V * U'
-    if (u.determinant() * v.determinant() < 0)
-    {
+    if (u.determinant() * v.determinant() < 0) {
         for (int x = 0; x < 3; ++x) {
             v (x, 2) *= -1;
         }
@@ -94,7 +80,7 @@ void fine_registration::compute_transform(Matrix3f& R, Vector3f& t, const cv::Ma
             p2 = scan1.reproject_point(x+fxy.x, y+fxy.y, z2);
             //delta = 0.0005*Vector3f(fxy.x, fxy.y, 0.0*diff);
             x1.col(counter) = p1;
-            x2.col(counter) = p1 + 0.9*(p2 - p1);//point + delta;
+            x2.col(counter) = p1 + 0.80*(p2 - p1);//point + delta;
 
             ++counter;
         }
@@ -110,40 +96,10 @@ void fine_registration::compute_transform(Matrix3f& R, Vector3f& t, const cv::Ma
     //x1.row(3).setZero();
     //x2.row(3).setZero();
     Matrix4f transformation;
-    getTransformationFromCorrelation(x1, x1m, x2, x2m, transformation);
+    get_transformation_from_correlation(x1, x1m, x2, x2m, transformation);
     R = transformation.topLeftCorner(3, 3);
     t = transformation.block(0, 3, 3, 1);
     //std::cout << "Mean translation: " << (x2m-x1m).transpose() << std::endl;
-}
-
-void fine_registration::compute_jacobian(VectorXf& jacobian, const cv::Mat& depth2, const cv::Mat& depth1,
-                                         const cv::Mat& flow, const cv::Mat& invalid, Vector3f& trans) const
-{
-    jacobian.resize(6);
-    jacobian.setZero();
-    Vector3d dEdt;
-    Vector3d mean_dEdt;
-    mean_dEdt.setZero();
-    Vector3f point;
-    MatrixXf J;
-    double counter = 0.0;
-    for (int y = 0; y < flow.rows; ++y) {
-        for (int x = 0; x < flow.cols; ++x) {
-            if (invalid.at<bool>(y, x)) {
-                continue;
-            }
-            const cv::Point2f& fxy = flow.at<cv::Point2f>(y, x);
-            float diff = depth2.at<float>(y, x) - depth1.at<float>(y, x);
-            dEdt = Vector3d(fxy.x, fxy.y, 100*(depth2.at<float>(y, x) - depth1.at<float>(y, x)));
-            point = scan1.reproject_point(x, y, depth1.at<float>(y, x));
-            compute_transform_jacobian(J, point);
-            jacobian = counter/(counter+1.0)*jacobian + J.transpose()*dEdt.cast<float>()/(counter + 1.0);
-            mean_dEdt += dEdt;
-            counter += 1.0;
-        }
-    }
-    mean_dEdt = 1.0/counter*mean_dEdt;
-    trans = mean_dEdt.cast<float>();
 }
 
 float fine_registration::compute_error(const cv::Mat& depth2, const cv::Mat& depth1, const cv::Mat& invalid) const
@@ -157,7 +113,7 @@ float fine_registration::compute_error(const cv::Mat& depth2, const cv::Mat& dep
                 continue;
             }
             val = depth2.at<float>(y, x) - depth1.at<float>(y, x);
-            rtn += val*val;
+            rtn += fabs(val);//val*val;
             counter += 1.0;
         }
     }
@@ -170,19 +126,23 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::Mat depth1, rgb1;
     size_t ox, oy;
     bool behind = scan1.is_behind(scan2);
-    //Matrix3f R1, R2;
-    //Vector3f t1, t2;
     if (behind) {
         scan1.project(depth2, rgb2, ox, oy, scan2);
-        scan1.submatrices(depth1, rgb1, ox, oy, depth2.size().width, depth2.size().height);
-        //scan1.get_transform(R1, t1);
-        //scan2.get_transform(R2, t2);
+        if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
+            std::cout << "Scans not overlapping!" << std::endl;
+        }
+        std::cout << "ox: " << ox << std::endl;
+        std::cout << "oy: " << oy << std::endl;
+        scan1.submatrices(depth1, rgb1, ox, oy, depth2.cols, depth2.rows);
     }
     else {
         scan2.project(depth2, rgb2, ox, oy, scan1);
-        scan2.submatrices(depth1, rgb1, ox, oy, depth2.size().width, depth2.size().height);
-        //scan2.get_transform(R1, t1);
-        //scan1.get_transform(R2, t2);
+        if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
+            std::cout << "Scans not overlapping!" << std::endl;
+        }
+        std::cout << "ox: " << ox << std::endl;
+        std::cout << "oy: " << oy << std::endl;
+        scan2.submatrices(depth1, rgb1, ox, oy, depth2.cols, depth2.rows);
     }
     //Matrix3f Rdiff = R1.transpose()*R2;
     //Vector3f tdiff = R1.transpose()*(t2 - t1);
@@ -203,26 +163,28 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::Mat binary;
     cv::bitwise_or(depth1 == 0, depth2 == 0, binary);
     
-    int morph_size = 4;
-    int const max_elem = 2;
-    int const max_kernel_size = 21;
-    
-    int morph_type = cv::MORPH_ELLIPSE;
-    cv::Mat element = cv::getStructuringElement(morph_type,
-                                       cv::Size(2*morph_size + 1, 2*morph_size+1),
-                                       cv::Point(morph_size, morph_size));
-    cv::Mat temp1, temp2;
-    /// Apply the dilation operation
+    if (true) {
+        int morph_size = 4;
+        int const max_elem = 2;
+        int const max_kernel_size = 21;
 
-    cv::erode(binary, temp1, element);
-    //cv::imshow("Erosion Demo", temp);
-    element = cv::getStructuringElement(morph_type,
-                                       cv::Size(3*morph_size + 1, 3*morph_size+1),
-                                       cv::Point(morph_size, morph_size));
-    /// Apply the erosion operation
-    cv::dilate(temp1, temp2, element);
-    cv::bitwise_or(binary, temp2, temp1);
-    binary = temp1;
+        int morph_type = cv::MORPH_ELLIPSE;
+        cv::Mat element = cv::getStructuringElement(morph_type,
+                                           cv::Size(2*morph_size + 1, 2*morph_size+1),
+                                           cv::Point(morph_size, morph_size));
+        cv::Mat temp1, temp2;
+        /// Apply the dilation operation
+
+        cv::erode(binary, temp1, element);
+        //cv::imshow("Erosion Demo", temp);
+        element = cv::getStructuringElement(morph_type,
+                                           cv::Size(3*morph_size + 1, 3*morph_size+1),
+                                           cv::Point(morph_size, morph_size));
+        /// Apply the erosion operation
+        cv::dilate(temp1, temp2, element);
+        cv::bitwise_or(binary, temp2, temp1);
+        binary = temp1;
+    }
     
     //cv::namedWindow("Binary", CV_WINDOW_AUTOSIZE);
     //cv::imshow("Binary", binary);
@@ -231,7 +193,17 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::Mat gray2, gray1, flow, cflow;
     cvtColor(rgb2, gray2, CV_RGB2GRAY);
     cvtColor(rgb1, gray1, CV_RGB2GRAY);
-    cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN
+    //cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN
+
+    std::vector<cv::Mat> channels1(3);
+    // split img:
+    cv::split(rgb1, channels1);
+
+    std::vector<cv::Mat> channels2(3);
+    // split img:
+    cv::split(rgb2, channels2);
+    cv::calcOpticalFlowFarneback(channels1[2], channels2[2], flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN
+
     cv::cvtColor(gray1, cflow, CV_GRAY2BGR);
     std::vector<cv::Mat> images(3);
     images.at(0) = gray2; //for blue channel
@@ -255,26 +227,6 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     //cv::imshow("DepthFlow", cflow);
     //cv::waitKey(10);
 
-    /*VectorXf jacobian;
-    Vector3f trans;
-    compute_jacobian(jacobian, depth2, depth1, flow, binary, trans);
-
-    if (!behind) {
-        jacobian = -jacobian;
-        trans = -trans;
-    }
-
-    float delta = 0.00008;
-    Matrix3f Rx = AngleAxisf(delta*jacobian(3), Vector3f::UnitX()).matrix();
-    Matrix3f Ry = AngleAxisf(delta*jacobian(4), Vector3f::UnitY()).matrix();
-    Matrix3f Rz = AngleAxisf(delta*jacobian(5), Vector3f::UnitZ()).matrix();
-    R = Rx*Ry*Rz;
-    R.setIdentity();*/
-    //Eigen::Matrix3f R1;
-    //Eigen::Vector3f t1;
-    //scan1.get_transform(R1, t1);
-    //t = delta*jacobian.head<3>();
-    //t = 0.0005*trans;//delta*jacobian.head<3>().transpose();
     compute_transform(R, t, depth2, depth1, flow, binary);
 
     int midx = colorImage.cols/2;
@@ -285,14 +237,10 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::imshow("Flow", colorImage);
     cv::waitKey(10);
 
-    //std::cout << "R: \n" << R << std::endl;
     Matrix3f Rt = R.transpose();
     if (!behind) {
-        std::cout << "S2 was behind S1!" << std::endl;
         t = -Rt*t;
         R = Rt;
     }
-    //std::cout << "R.determinant(): " << Rt*R << std::endl;
-    //R.setIdentity();
     last_error = compute_error(depth2, depth1, binary);
 }

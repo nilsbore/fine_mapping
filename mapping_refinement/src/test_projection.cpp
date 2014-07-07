@@ -41,14 +41,14 @@ int main(int arg, char** argv)
     do {
         r.step(R, t);
         s1.transform(R, t);
-        /*for (size_t i = 0; i < cloud1->points.size(); ++i) {
+        for (size_t i = 0; i < cloud1->points.size(); ++i) {
             cloud1->points[i].getVector3fMap() = R*cloud1->points[i].getVector3fMap() + Rtot*t;
         }
         Rtot = R*Rtot;
         viewer.lock();
         viewer.cloud1 = cloud1;
         viewer.cloud1_changed = true;
-        viewer.unlock();*/
+        viewer.unlock();
         error = r.error();
         std::cout << "Error: " << error << std::endl;
     } while (true);

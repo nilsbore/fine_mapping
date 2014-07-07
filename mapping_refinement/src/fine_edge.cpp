@@ -8,6 +8,7 @@ fine_edge::fine_edge(fine_vertex& f1, fine_vertex& f2) : fine_registration(f1, f
 
 void fine_edge::computeError()
 {
+    std::cout << "Requested last error: " << last_error << std::endl;
     _error(0) = last_error;
 }
 
@@ -29,11 +30,17 @@ void fine_edge::linearizeOplus()
     //T.block<3, 1>(0, 3) = t.cast<double>();
     //Eigen::Isometry3d Ti(T);
     Eigen::Quaterniond q(R.cast<double>());
-    _jacobianOplusXi.head<3>() = -t.cast<double>();
+    /*_jacobianOplusXi.head<3>() = -t.cast<double>();
     _jacobianOplusXj.head<3>() = -(-R.transpose()*t).cast<double>();
     _jacobianOplusXi.tail<3>() = -q.vec();
     q = q.inverse();
-    _jacobianOplusXj.tail<3>() = -q.vec();
+    _jacobianOplusXj.tail<3>() = -q.vec();*/
+    Eigen::Array3d E = -last_error/2.0*Eigen::Array3d::Ones();
+    _jacobianOplusXi.head<3>() = E*t.cast<double>().array();
+    _jacobianOplusXj.head<3>() = E*(-R.transpose()*t).cast<double>().array();
+    _jacobianOplusXi.tail<3>() = E*q.vec().array();
+    q = q.inverse();
+    _jacobianOplusXj.tail<3>() = E*q.vec().array();
 
 }
 

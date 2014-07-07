@@ -88,7 +88,7 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
     basis = ebasis;
     if (one == 0) {
         //origin += Vector3f(0.0, 0.1, 0.0);
-        basis = R*basis;
+        //basis = R*basis;
     }
     one += 1.0;
     size_t n = cloud.points.size(); 
@@ -133,7 +133,7 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
     ROS_INFO("Max depth %f", maxz);
     
     size_t ox, oy;
-    project(depth_img, rgb_img, ox, oy, *this);
+    project(depth_img, rgb_img, ox, oy, *this, true);
     ArrayXXf confining_points;
     camera_cone(confining_points);
 }
@@ -187,34 +187,43 @@ void scan::submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_
     rgb = rgb_img.colRange(ox, ox + w).rowRange(oy, oy + h);
 }
 
-void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other) const
+void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, bool init) const
 {   
     Matrix3f R = basis.transpose()*other.basis;
     Vector3f t = basis.transpose()*(other.origin - origin);
     
-    ArrayXXf confining_points;
-    other.camera_cone(confining_points);
-    confining_points = R*confining_points.matrix();
-    confining_points.matrix() += t.replicate(1, 8);
-    
-    confining_points.row(0) = fx*confining_points.row(0)/confining_points.row(2) + cx;
-    confining_points.row(1) = fy*confining_points.row(1)/confining_points.row(2) + cy;
-    int minx = int(confining_points.row(0).minCoeff());
-    int maxx = int(confining_points.row(0).maxCoeff());
-    int miny = int(confining_points.row(1).minCoeff());
-    int maxy = int(confining_points.row(1).maxCoeff());
-    minx = std::max(minx, 0);
-    miny = std::max(miny, 0);
-    maxx = std::min(maxx, int(width)); // + 0.5?
-    maxy = std::min(maxy, int(height));
-    
-    int pwidth = maxx - minx;
-    int pheight = maxy - miny;
+    int pwidth, pheight;
+    int minx, miny;
+    if (init) {
+        pwidth = width;
+        pheight = height;
+        minx = miny = 0;
+    }
+    else {
+        ArrayXXf confining_points;
+        other.camera_cone(confining_points);
+        confining_points = R*confining_points.matrix();
+        confining_points.matrix() += t.replicate(1, 8);
 
-    std::cout << "Cropped width: " << pwidth << ", height: " << pheight << std::endl;
-    if (maxx <= minx || maxy <= miny) {
-        std::cout << "Scans are not overlapping!" << std::endl;
-        exit(0);
+        confining_points.row(0) = fx*confining_points.row(0)/confining_points.row(2) + cx;
+        confining_points.row(1) = fy*confining_points.row(1)/confining_points.row(2) + cy;
+        minx = int(confining_points.row(0).minCoeff());
+        int maxx = int(confining_points.row(0).maxCoeff());
+        miny = int(confining_points.row(1).minCoeff());
+        int maxy = int(confining_points.row(1).maxCoeff());
+        minx = std::max(minx, 0);
+        miny = std::max(miny, 0);
+        maxx = std::min(maxx, int(width)); // + 0.5?
+        maxy = std::min(maxy, int(height));
+
+        pwidth = maxx - minx;
+        pheight = maxy - miny;
+
+        std::cout << "Cropped width: " << pwidth << ", height: " << pheight << std::endl;
+        if (maxx <= minx || maxy <= miny) {
+            std::cout << "Scans are not overlapping!" << std::endl;
+            exit(0);
+        }
     }
 
     MatrixXf copy = other.points;
