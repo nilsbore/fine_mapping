@@ -25,13 +25,14 @@ protected:
                                                     const Eigen::Vector3f& centroid_tgt,
                                                     Eigen::Matrix4f& transformation_matrix);
 public:
+    static bool register_scans(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan* scan1, scan* scan2);
     float error() const { return last_error; }
     void step(Eigen::Matrix3f& R, Eigen::Vector3f& t);
     fine_registration(scan& scan1, scan& scan2) : scan1(scan1), scan2(scan2)
     {
         pyr_scale = 0.5;
         levels = 3;
-        winsize = 100; // 50
+        winsize = 200; // 100
         iterations = 3;
         poly_n = 5;
         poly_sigma = 3.2;

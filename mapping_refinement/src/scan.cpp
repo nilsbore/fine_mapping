@@ -219,7 +219,7 @@ void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
         pwidth = maxx - minx;
         pheight = maxy - miny;
 
-        std::cout << "Cropped width: " << pwidth << ", height: " << pheight << std::endl;
+        //std::cout << "Cropped width: " << pwidth << ", height: " << pheight << std::endl;
         if (maxx <= minx || maxy <= miny) {
             std::cout << "Scans are not overlapping!" << std::endl;
             exit(0);
@@ -235,7 +235,6 @@ void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
     copy.row(1) = fy*copy.row(1).array()/copy.row(2).array() + cy;
     
     depth = cv::Mat::zeros(pheight, pwidth, CV_32FC1);
-    //cv::Mat depth2 = cv::Mat::zeros(height, width, CV_16UC1);
     rgb = cv::Mat::zeros(pheight, pwidth, CV_8UC3);
     
     int x, y;
@@ -248,7 +247,6 @@ void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
             curr_z = depth.at<float>(y, x);
             if (curr_z == 0 || curr_z > z) {
                 depth.at<float>(y, x) = z;
-                //depth2.at<uint16_t>(y, x) = uint16_t(1000.0*z);
                 rgb.at<cv::Vec3b>(y, x)[0] = other.red[i];
                 rgb.at<cv::Vec3b>(y, x)[1] = other.green[i];
                 rgb.at<cv::Vec3b>(y, x)[2] = other.blue[i];
@@ -262,13 +260,6 @@ void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
     if (&other == this) {
         return;
     }
-    
-    /*int thickness = 2;
-    int lineType = 8;
-    for (size_t i = 0; i < 8; ++i) {
-        cv::Point point(int(copy(1, i)) - miny, int(copy(0, i)) - minx);
-        circle(rgb, point, 10.0, cv::Scalar(255, 0, 0), thickness, lineType);
-    }*/
     
     /*cv::namedWindow("Depth1", CV_WINDOW_AUTOSIZE);
     cv::imshow("Depth1", depth);

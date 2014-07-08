@@ -11,132 +11,61 @@
 #include <pcl/io/pcd_io.h>
 
 #include "g2o/core/sparse_optimizer.h"
-//#include "g2o/solvers/pcg/linear_solver_pcg.h"
 #include "g2o/core/block_solver.h"
 #include "g2o/core/linear_solver.h"
 #include "g2o/core/optimization_algorithm_levenberg.h"
-//#include "g2o/solvers/slam2d_linear/solver_slam2d_linear.h"
-//#include "g2o/solvers/csparse/g2o_csparse_api.h"
-//#include "g2o/solvers/csparse/linear_solver_csparse.h"
 #include "g2o/solvers/pcg/linear_solver_pcg.h"
 #include "g2o/types/slam3d/edge_se3.h"
 #include "g2o/types/slam3d/vertex_se3.h"
 
-bool register_scans(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan* scan1, scan* scan2)
-{
-    Eigen::Matrix3f R_orig;
-    Eigen::Vector3f t_orig;
-    scan1->get_transform(R_orig, t_orig);
-    Eigen::Quaternionf q = Eigen::Quaternionf(R);
-    q.normalize();
-    Eigen::Vector3f q_orig = q.vec().segment<3>(0);
-    fine_registration r(*scan1, *scan2);
-    q.setIdentity();
-    Eigen::Vector3f t_last;
-    t_last.setZero();
-    Eigen::Vector3f q_last;
-    q_last.setZero();
-    Eigen::Vector3f q_diff, t_diff;
-    do {
-        t_last.setZero(); // if only taking into account how big current is
-        q_last.setZero();
-        r.step(R, t);
-        //scan2->transform(R.transpose(), -R.transpose()*t);
-        scan1->transform(R, t);
-        float error = r.error();
-        q = Eigen::Quaternionf(R);
-        q.normalize();
-        q_diff = q.vec().segment<3>(0) - q_last; // might as well take all four?
-        t_diff = t - t_last;
-        t_last = t;
-        q_last = q.vec().segment<3>(0);
-        std::cout << "Error: " << error << std::endl;
-        std::cout << "Translation diff: " << t_diff.norm() << std::endl;
-        std::cout << "Rotation diff: " << q_diff.norm() << std::endl;
-    }
-    while (t_diff.norm() > 0.003 || q_diff.norm() > 0.0008);
-    scan1->get_transform(R, t);
-    scan1->set_transform(R_orig, t_orig);
-    std::cout << "REGISTRATION FINISHED!" << std::endl;
-    t_diff = t_last - t_orig;
-    q_diff = q_last - q_orig;
-    if (t_diff.norm() > 0.05 || q_diff.norm() > 0.005) {
-        return false;
-    }
-    else {
-        return true;
-    }
-}
+#include <string>
 
-int main2(int argc, char** argv)
+void view_registered_pointclouds(std::vector<std::string>& cloud_files, std::vector<scan*>& scans)
 {
-    /*boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
+    size_t n = cloud_files.size();
+    if (scans.size() != n) {
+        std::cout << "Not same size, clouds: " << n << ", scans: " << scans.size() << std::endl;
+        return;
+    }
+    std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
+    clouds.resize(n);
+    Eigen::Matrix3f R;
+    Eigen::Vector3f t;
+    for (size_t i = 0; i < n; ++i) {
+        clouds[i] = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
+        if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(cloud_files[i], *clouds[i]) == -1) //* load the file
+        {
+            printf("Couldn't read file %s", cloud_files[i].c_str());
+            return;
+        }
+        scans[i]->get_transform(R, t);
+        for (pcl::PointXYZRGB& point : clouds[i]->points) {
+            point.getVector3fMap() = R*point.getVector3fMap() + t;
+        }
+    }
+
+    boost::shared_ptr<pcl::visualization::PCLVisualizer>
+            viewer (new pcl::visualization::PCLVisualizer("3D Viewer"));
     viewer->setBackgroundColor(0, 0, 0);
+
     // Starting visualizer
     viewer->addCoordinateSystem(1.0);
-    viewer->initCameraParameters();*/
-
-    typedef g2o::BlockSolver<g2o::BlockSolverTraits<-1, -1> >  SlamBlockSolver;
-    typedef g2o::LinearSolverPCG<SlamBlockSolver::PoseMatrixType> SlamLinearSolver;
-
-    g2o::SparseOptimizer optimizer;
-    SlamLinearSolver* linearSolver = new SlamLinearSolver();
-    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(blockSolver);
-    solver->setUserLambdaInit(0); // 0
-    optimizer.setAlgorithm(solver);
-
-    std::string folder = std::string(getenv("HOME")) + std::string("/.ros/mapping_refinement");
-    std::vector<std::string> scans;
-    std::vector<std::string> transforms;
-    std::vector<scan*> scan_objects;
-    std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
-    std::vector<fine_vertex*> vertices;
-    size_t n = 34;
-    clouds.resize(n);
-    vertices.resize(n);
-    scan_objects.resize(n);
+    viewer->initCameraParameters();
     for (size_t i = 0; i < n; ++i) {
-        std::stringstream ss;
-        ss << std::setfill('0') << std::setw(6) << i;
-        scans.push_back(folder + std::string("/shot") + ss.str() + std::string(".pcd"));
-        transforms.push_back(folder + std::string("/transform") + ss.str() + std::string(".txt"));
-        /*vertices[i] = new fine_vertex(scans.back(), transforms.back());
-        vertices[i]->get_transform(R, t);
-        vertices[i]->setId(i);
-        optimizer.addVertex(vertices[i]);*/
-
-        scan_objects[i] = new scan(scans.back(), transforms.back());
-        //pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-        /*clouds[i] = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
-        pcl::io::loadPCDFile<pcl::PointXYZRGB>(scans.back(), *clouds[i]);
-        for (size_t j = 0; j < clouds[i]->points.size(); ++j) {
-            clouds[i]->points[j].getVector3fMap() = R*clouds[i]->points[j].getVector3fMap() + t;
-        }
+        std::string cloudname = std::string("cloud") + std::to_string(i);
         pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGB> rgb(clouds[i]);
-        viewer->addPointCloud<pcl::PointXYZRGB>(clouds[i], rgb, std::string("cloud") + ss.str());
+        viewer->addPointCloud<pcl::PointXYZRGB>(clouds[i], rgb, cloudname);
         viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
-                                                 1, std::string("cloud") + ss.str());*/
-        std::cout << "Cloud: " << i << std::endl;
+                                                 1, cloudname);
     }
 
-    /*fine_edge* test = new fine_edge(*vertices[1], *vertices[3]);
-    Eigen::Matrix<double, 1, 1, 0, 1, 1> info;// = 0.00001*Eigen::Matrix<double, 6, 6>::setIdentity();
-    info(0, 0) = 1.0;
-    test->setInformation(info);
-    optimizer.addEdge(test);*/
-
-    //optimizer.initializeOptimization();
-    std::cout << "Optimizing..." << std::endl;
-    optimizer.setVerbose(true);
-    //optimizer.optimize(10);
-    std::cout << "Done optimizing!" << std::endl;
-
-    /*while (!viewer->wasStopped()) {
+    // Wait until visualizer window is closed.
+    while (!viewer->wasStopped())
+    {
         viewer->spinOnce(100);
-        //boost::this_thread::sleep(boost::posix_time::microseconds(100000));
-    }*/
-    return 0;
+        boost::this_thread::sleep(boost::posix_time::microseconds(100000));
+    }
+    viewer->close();
 }
 
 int main(int argc, char** argv)
@@ -148,29 +77,34 @@ int main(int argc, char** argv)
     SlamLinearSolver* linearSolver = new SlamLinearSolver();
     SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
     g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(blockSolver);
-    solver->setUserLambdaInit(0); // 0
+    solver->setUserLambdaInit(5); // 0
     optimizer.setAlgorithm(solver);
 
     std::string folder = std::string(getenv("HOME")) + std::string("/.ros/mapping_refinement");
     std::vector<std::string> scan_files;
     std::vector<std::string> t_files;
     std::vector<scan*> scans;
-    size_t n = 34;
 
+    size_t n = 34;
     // set the filenames for the pointclouds and transforms, initialize scan objects
     for (size_t i = 0; i < n; ++i) {
+        /*if (i % 2 == 1) {
+            continue;
+        }*/
         std::stringstream ss;
         ss << std::setfill('0') << std::setw(6) << i;
         scan_files.push_back(folder + std::string("/shot") + ss.str() + std::string(".pcd"));
         t_files.push_back(folder + std::string("/transform") + ss.str() + std::string(".txt"));
         scans.push_back(new scan(scan_files.back(), t_files.back()));
     }
+    n = scans.size();
 
     // adding the odometry to the optimizer
     // first adding all the vertices
     Eigen::Matrix3f R;
     Eigen::Vector3f t;
     Eigen::Matrix4d T;
+    T.setIdentity();
     std::vector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d> > estimates;
     std::cout << "Optimization: Adding robot poses ... ";
     for (size_t i = 0; i < n; ++i) {
@@ -188,17 +122,11 @@ int main(int argc, char** argv)
     std::vector<bool> measurement_correct;
 
     bool correct;
-    for (size_t i = 0; i < n; ++i) {
+    for (size_t i = 0; i < n; ++i) { // n
         size_t j = (i+1)%n;
         size_t k = (i+2)%n;
         if (i % 2 == 0) {
-            correct = register_scans(R, t, scans[i], scans[j]);
-            if (correct) {
-                std::cout << "CORRECT!" << std::endl;
-            }
-            else {
-                std::cout << "INCORRECT!" << std::endl;
-            }
+            correct = fine_registration::register_scans(R, t, scans[i], scans[j]);
             T.topLeftCorner<3, 3>() = R.cast<double>();
             T.block<3, 1>(0, 3) = t.cast<double>();
             Eigen::Isometry3d transform(T);
@@ -206,7 +134,7 @@ int main(int argc, char** argv)
             measurements.push_back(transform);
             measurement_correct.push_back(correct);
         }
-        correct = register_scans(R, t, scans[i], scans[k]);
+        correct = fine_registration::register_scans(R, t, scans[i], scans[k]);
         T.topLeftCorner<3, 3>() = R.cast<double>();
         T.block<3, 1>(0, 3) = t.cast<double>();
         Eigen::Isometry3d transform(T);
@@ -215,12 +143,14 @@ int main(int argc, char** argv)
         measurement_correct.push_back(correct);
     }
 
+    std::vector<g2o::VertexSE3*> vertices;
     // add vertices to optimizer
     for (size_t i = 0; i < n; ++i) {
         g2o::VertexSE3* robot = new g2o::VertexSE3;
         robot->setId(i);
         robot->setEstimate(estimates[i]);
         optimizer.addVertex(robot);
+        vertices.push_back(robot);
     }
 
     // good information
@@ -247,4 +177,22 @@ int main(int argc, char** argv)
         optimizer.addEdge(odometry);
     }
     std::cout << "done." << std::endl;
+
+    optimizer.initializeOptimization();
+    std::cout << "Optimizing..." << std::endl;
+    optimizer.setVerbose(true);
+    optimizer.optimize(10);
+    std::cout << "Done optimizing!" << std::endl;
+
+    for (size_t i = 0; i < n; ++i) {
+        Eigen::Isometry3d estimate = vertices[i]->estimate();
+        Eigen::Matrix4f transform = estimate.matrix().cast<float>();
+        R = transform.topLeftCorner<3, 3>();
+        t = transform.block<3, 1>(0, 3);
+        scans[i]->set_transform(R, t);
+    }
+
+    view_registered_pointclouds(scan_files, scans);
+
+    return 0;
 }

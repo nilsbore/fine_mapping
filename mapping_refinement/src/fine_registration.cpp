@@ -5,6 +5,72 @@
 
 using namespace Eigen;
 
+bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, scan* scan2)
+{
+    Matrix3f R_comp;
+    R_comp.setIdentity();
+    Vector3f t_comp;
+    t_comp.setZero();
+
+    Matrix3f R_orig;
+    Vector3f t_orig;
+    scan1->get_transform(R_orig, t_orig);
+    fine_registration r(*scan1, *scan2);
+    AngleAxisf a;
+    do {
+        r.step(R, t);
+        //scan2->transform(R.transpose(), -R.transpose()*t);
+        scan1->transform(R, t);
+        //float error = r.error();
+        a = AngleAxisf(R);
+        //std::cout << "Error: " << error << std::endl;
+        //std::cout << "Translation diff: " << t_diff.norm() << std::endl;
+        //std::cout << "Rotation diff: " << q_diff.norm() << std::endl;
+
+        R_comp = R_comp*R; // add to total rotation
+        t_comp += R_comp*t; // add to total translation
+    }
+    while (t.norm() > 0.003 || fabs(a.angle()) > 0.0008);
+    Matrix3f R_final;
+    Vector3f t_final;
+    Matrix3f R2;
+    Vector3f t2;
+    scan2->get_transform(R2, t2);
+    scan1->get_transform(R_final, t_final);
+    //R_final = R_orig; // REMOVE!
+    //t_final = t_orig; // REMOVE!
+    scan1->set_transform(R_orig, t_orig);
+    //R = R_final*R_orig.transpose();
+    //t = t_final - R*t_orig;
+
+    R = R_final.transpose()*R2;
+    t = R_final.transpose()*(t2-t_final);
+
+    // DEBUG
+    std::cout << "R: \n" << R << "\nt: " << t.transpose() << std::endl;
+    std::cout << "R_comp: \n" << R_comp << "\nt_comp: " << t_comp.transpose() << std::endl;
+
+    //R = R_comp;
+    //t = t_comp;
+    // DEBUG
+
+    a = AngleAxisf(R_comp);
+    if (t_comp.norm() > 0.12) {
+        std::cout << "Incorrect because of translation: " << t.norm() << std::endl;
+        return false;
+    }
+    else if (fabs(a.angle()) > 0.05) {
+        std::cout << "Incorrect because of rotation: " << fabs(a.angle()) << std::endl;
+        return false;
+    }
+    else {
+        std::cout << "Correct" << std::endl;
+        std::cout << "Translation: " << t.norm() << std::endl;
+        std::cout << "Rotation: " << fabs(a.angle()) << std::endl;
+        return true;
+    }
+}
+
 static void drawOptFlowMap(const cv::Mat& flow, cv::Mat& cflowmap, cv::Mat& invalid, int step, double len, const cv::Scalar& color)
 {
     for (int y = 0; y < cflowmap.rows; y += step) {
@@ -34,7 +100,7 @@ void fine_registration::get_transformation_from_correlation(
     Matrix3f H = (cloud_src_demean * cloud_tgt_demean.transpose()).topLeftCorner(3, 3);
 
     // Compute the Singular Value Decomposition
-    Eigen::JacobiSVD<Matrix3f > svd (H, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    JacobiSVD<Matrix3f > svd (H, ComputeFullU | ComputeFullV);
     Matrix3f u = svd.matrixU();
     Matrix3f v = svd.matrixV();
 
@@ -89,17 +155,12 @@ void fine_registration::compute_transform(Matrix3f& R, Vector3f& t, const cv::Ma
     x2.conservativeResize(3, counter);
     Vector3f x1m = x1.rowwise().mean();
     Vector3f x2m = x2.rowwise().mean();
-    //x1m(3) = 0.0;
-    //x2m(3) = 0.0;
     x1 -= x1m.replicate(1, counter);
     x2 -= x2m.replicate(1, counter);
-    //x1.row(3).setZero();
-    //x2.row(3).setZero();
     Matrix4f transformation;
     get_transformation_from_correlation(x1, x1m, x2, x2m, transformation);
     R = transformation.topLeftCorner(3, 3);
     t = transformation.block(0, 3, 3, 1);
-    //std::cout << "Mean translation: " << (x2m-x1m).transpose() << std::endl;
 }
 
 float fine_registration::compute_error(const cv::Mat& depth2, const cv::Mat& depth1, const cv::Mat& invalid) const
@@ -130,22 +191,20 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
         scan1.project(depth2, rgb2, ox, oy, scan2);
         if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
             std::cout << "Scans not overlapping!" << std::endl;
+            std::cout << "ox: " << ox << std::endl;
+            std::cout << "oy: " << oy << std::endl;
         }
-        std::cout << "ox: " << ox << std::endl;
-        std::cout << "oy: " << oy << std::endl;
         scan1.submatrices(depth1, rgb1, ox, oy, depth2.cols, depth2.rows);
     }
     else {
         scan2.project(depth2, rgb2, ox, oy, scan1);
         if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
             std::cout << "Scans not overlapping!" << std::endl;
+            std::cout << "ox: " << ox << std::endl;
+            std::cout << "oy: " << oy << std::endl;
         }
-        std::cout << "ox: " << ox << std::endl;
-        std::cout << "oy: " << oy << std::endl;
         scan2.submatrices(depth1, rgb1, ox, oy, depth2.cols, depth2.rows);
     }
-    //Matrix3f Rdiff = R1.transpose()*R2;
-    //Vector3f tdiff = R1.transpose()*(t2 - t1);
     
     /*cv::namedWindow("Depth1", CV_WINDOW_AUTOSIZE);
     cv::imshow("Depth1", depth);
@@ -165,8 +224,6 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     
     if (true) {
         int morph_size = 4;
-        int const max_elem = 2;
-        int const max_kernel_size = 21;
 
         int morph_type = cv::MORPH_ELLIPSE;
         cv::Mat element = cv::getStructuringElement(morph_type,
@@ -191,8 +248,8 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     //cv::waitKey(0);
     
     cv::Mat gray2, gray1, flow, cflow;
-    cvtColor(rgb2, gray2, CV_RGB2GRAY);
-    cvtColor(rgb1, gray1, CV_RGB2GRAY);
+    //cvtColor(rgb2, gray2, CV_RGB2GRAY);
+    //cvtColor(rgb1, gray1, CV_RGB2GRAY);
     //cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN
 
     std::vector<cv::Mat> channels1(3);
@@ -206,9 +263,9 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
 
     cv::cvtColor(gray1, cflow, CV_GRAY2BGR);
     std::vector<cv::Mat> images(3);
-    images.at(0) = gray2; //for blue channel
-    images.at(1) = cv::Mat::zeros(gray2.rows, gray2.cols, gray2.type());   //for green channel
-    images.at(2) = gray1;  //for red channel
+    images.at(0) = channels2[2]; //gray2; //for blue channel
+    images.at(1) = cv::Mat::zeros(channels2[2].rows, channels2[2].cols, channels2[2].type()); //cv::Mat::zeros(gray2.rows, gray2.cols, gray2.type());   //for green channel
+    images.at(2) = channels1[2]; //gray1;  //for red channel
     cv::Mat colorImage;
     cv::merge(images, colorImage);
     cv::namedWindow("Diff", CV_WINDOW_AUTOSIZE);
@@ -242,5 +299,5 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
         t = -Rt*t;
         R = Rt;
     }
-    last_error = compute_error(depth2, depth1, binary);
+    //last_error = compute_error(depth2, depth1, binary);
 }
