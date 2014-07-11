@@ -33,9 +33,9 @@ public:
         pyr_scale = 0.5;
         levels = 3;
         winsize = 200; // 100
-        iterations = 3;
-        poly_n = 5;
-        poly_sigma = 3.2;
+        iterations = 2; // 3
+        poly_n = 9;//5;
+        poly_sigma = 3.0;//3.2;
     }
 };
 #endif // FINE_REGISTRATION_H

@@ -17,6 +17,7 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
     scan1->get_transform(R_orig, t_orig);
     fine_registration r(*scan1, *scan2);
     AngleAxisf a;
+    size_t counter = 0;
     do {
         r.step(R, t);
         //scan2->transform(R.transpose(), -R.transpose()*t);
@@ -29,8 +30,9 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
 
         R_comp = R_comp*R; // add to total rotation
         t_comp += R_comp*t; // add to total translation
+        ++counter;
     }
-    while (t.norm() > 0.003 || fabs(a.angle()) > 0.0008);
+    while (counter < 20 && (t.norm() > 0.003 || fabs(a.angle()) > 0.0005));
     Matrix3f R_final;
     Vector3f t_final;
     Matrix3f R2;
@@ -43,9 +45,6 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
     //R = R_final*R_orig.transpose();
     //t = t_final - R*t_orig;
 
-    R = R_final.transpose()*R2;
-    t = R_final.transpose()*(t2-t_final);
-
     // DEBUG
     std::cout << "R: \n" << R << "\nt: " << t.transpose() << std::endl;
     std::cout << "R_comp: \n" << R_comp << "\nt_comp: " << t_comp.transpose() << std::endl;
@@ -55,18 +54,24 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
     // DEBUG
 
     a = AngleAxisf(R_comp);
-    if (t_comp.norm() > 0.12) {
-        std::cout << "Incorrect because of translation: " << t.norm() << std::endl;
+    if (t_comp.norm() > 0.08) {
+        std::cout << "Incorrect because of translation: " << t_comp.norm() << std::endl;
+        R = R_final.transpose()*R2;
+        t = R_final.transpose()*(t2-t_final);
         return false;
     }
     else if (fabs(a.angle()) > 0.05) {
         std::cout << "Incorrect because of rotation: " << fabs(a.angle()) << std::endl;
+        R = R_orig.transpose()*R2;
+        t = R_orig.transpose()*(t2-t_orig);
         return false;
     }
     else {
         std::cout << "Correct" << std::endl;
         std::cout << "Translation: " << t.norm() << std::endl;
         std::cout << "Rotation: " << fabs(a.angle()) << std::endl;
+        R = R_orig.transpose()*R2;
+        t = R_orig.transpose()*(t2-t_orig);
         return true;
     }
 }
@@ -146,7 +151,7 @@ void fine_registration::compute_transform(Matrix3f& R, Vector3f& t, const cv::Ma
             p2 = scan1.reproject_point(x+fxy.x, y+fxy.y, z2);
             //delta = 0.0005*Vector3f(fxy.x, fxy.y, 0.0*diff);
             x1.col(counter) = p1;
-            x2.col(counter) = p1 + 0.80*(p2 - p1);//point + delta;
+            x2.col(counter) = p1 + (p2 - p1);//point + delta;
 
             ++counter;
         }
@@ -248,24 +253,27 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     //cv::waitKey(0);
     
     cv::Mat gray2, gray1, flow, cflow;
-    //cvtColor(rgb2, gray2, CV_RGB2GRAY);
-    //cvtColor(rgb1, gray1, CV_RGB2GRAY);
-    //cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN
+    cvtColor(rgb2, gray2, CV_RGB2GRAY);
+    cvtColor(rgb1, gray1, CV_RGB2GRAY);
+    cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN
 
-    std::vector<cv::Mat> channels1(3);
+    /*std::vector<cv::Mat> channels1(3);
     // split img:
     cv::split(rgb1, channels1);
 
     std::vector<cv::Mat> channels2(3);
     // split img:
     cv::split(rgb2, channels2);
-    cv::calcOpticalFlowFarneback(channels1[2], channels2[2], flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN
+    cv::calcOpticalFlowFarneback(channels1[2], channels2[2], flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN*/
 
     cv::cvtColor(gray1, cflow, CV_GRAY2BGR);
     std::vector<cv::Mat> images(3);
-    images.at(0) = channels2[2]; //gray2; //for blue channel
-    images.at(1) = cv::Mat::zeros(channels2[2].rows, channels2[2].cols, channels2[2].type()); //cv::Mat::zeros(gray2.rows, gray2.cols, gray2.type());   //for green channel
-    images.at(2) = channels1[2]; //gray1;  //for red channel
+    //images.at(0) = channels2[2]; //gray2; //for blue channel
+    images.at(0) = gray2; //for blue channel
+    //images.at(1) = cv::Mat::zeros(channels2[2].rows, channels2[2].cols, channels2[2].type()); //cv::Mat::zeros(gray2.rows, gray2.cols, gray2.type());   //for green channel
+    images.at(1) = cv::Mat::zeros(gray2.rows, gray2.cols, gray2.type());   //for green channel
+    //images.at(2) = channels1[2]; //gray1;  //for red channel
+    images.at(2) = gray1;  //for red channel
     cv::Mat colorImage;
     cv::merge(images, colorImage);
     cv::namedWindow("Diff", CV_WINDOW_AUTOSIZE);

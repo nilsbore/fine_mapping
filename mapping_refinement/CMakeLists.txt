@@ -83,6 +83,8 @@ add_library(fine_vertex src/fine_vertex.cpp include/fine_vertex.h)
 add_executable(save_scan src/save_scan.cpp)
 add_executable(test_projection src/test_projection.cpp)
 add_executable(test_mapping src/test_mapping.cpp)
+add_executable(test_icp_mapping src/test_icp_mapping.cpp)
+add_executable(test_compare_registration src/test_compare_registration.cpp)
 add_executable(reproject_scans src/reproject_scans.cpp)
 
 ## Add cmake target dependencies of the executable/library
@@ -136,6 +138,32 @@ target_link_libraries(test_projection
 )
 
 target_link_libraries(test_mapping
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  fine_registration
+  fine_vertex
+  fine_edge
+  asynch_visualizer
+  g2o_core
+  g2o_types_slam3d
+  g2o_solver_csparse
+  g2o_stuff
+)
+
+target_link_libraries(test_icp_mapping
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  fine_registration
+  fine_vertex
+  fine_edge
+  asynch_visualizer
+  g2o_core
+  g2o_types_slam3d
+  g2o_solver_csparse
+  g2o_stuff
+)
+
+target_link_libraries(test_compare_registration
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   fine_registration
