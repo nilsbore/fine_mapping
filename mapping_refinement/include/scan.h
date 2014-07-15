@@ -27,7 +27,8 @@ public:
     Eigen::Vector3f reproject_point(int x, int y, float depth) const;
     void submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_t w, size_t h);
     bool is_behind(const scan& other) const;
-    void project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, bool init = false) const;
+    bool project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, bool init = false) const;
+    bool is_empty() { return points.cols() == 0; }
     void initialize_from_files(const std::string& pcdname, const std::string& tname);
     scan(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Eigen::Vector3f& origin, const Eigen::Matrix3f& basis, const Eigen::Matrix3f& K);
     scan(const std::string& pcdname, const std::string& tname);

@@ -90,9 +90,9 @@ bool register_clouds_icp(Eigen::Matrix3f& R, Eigen::Vector3f& t,
     }
     pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp; // don't really need rgb
     // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
-    icp.setMaxCorrespondenceDistance(0.04);
+    icp.setMaxCorrespondenceDistance(0.03);
     // Set the maximum number of iterations (criterion 1)
-    icp.setMaximumIterations(100);
+    icp.setMaximumIterations(50);
     // Set the transformation epsilon (criterion 2)
     icp.setTransformationEpsilon(1e-12);
     // Set the euclidean distance difference epsilon (criterion 3)
@@ -152,6 +152,20 @@ bool register_clouds_icp(Eigen::Matrix3f& R, Eigen::Vector3f& t,
     else {
         return false;
     }
+}
+
+void compute_initial_transformation(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan* scan1, scan* scan2)
+{
+    Eigen::AngleAxisf a(R);
+    if (a.angle() < 0.06 && t.norm() < 0.1) {
+        return;
+    }
+    Eigen::Matrix3f R1, R2;
+    Eigen::Vector3f t1, t2;
+    scan1->get_transform(R1, t1);
+    scan2->get_transform(R2, t2);
+    R = R1.transpose()*R2;
+    t = R1.transpose()*(t2-t1);
 }
 
 int main(int argc, char** argv)
@@ -230,6 +244,7 @@ int main(int argc, char** argv)
         if (i % 2 == 0) {
             //correct = fine_registration::register_scans(R, t, scans[i], scans[j]);
             correct = register_clouds_icp(R, t, scans[i], scans[j], clouds[i], clouds[j]);
+            compute_initial_transformation(R, t, scans[i], scans[j]);
             T.topLeftCorner<3, 3>() = R.cast<double>();
             T.block<3, 1>(0, 3) = t.cast<double>();
             Eigen::Isometry3d transform(T);
@@ -239,6 +254,7 @@ int main(int argc, char** argv)
         }
         //correct = fine_registration::register_scans(R, t, scans[i], scans[k]);
         correct = register_clouds_icp(R, t, scans[i], scans[k], clouds[i], clouds[k]);
+        compute_initial_transformation(R, t, scans[i], scans[k]);
         T.topLeftCorner<3, 3>() = R.cast<double>();
         T.block<3, 1>(0, 3) = t.cast<double>();
         Eigen::Isometry3d transform(T);
@@ -279,7 +295,7 @@ int main(int argc, char** argv)
             odometry->setInformation(good_info);
         }
         else {
-            odometry->setInformation(bad_info);
+            odometry->setInformation(good_info); //bad_info
         }
         optimizer.addEdge(odometry);
     }

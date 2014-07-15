@@ -108,6 +108,10 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
         ++counter;
     }
     points.conservativeResize(3, counter);
+    if (counter == 0) {
+        ROS_INFO("No points in cloud...");
+        return;
+    }
     //VectorXf meant = points.rowwise().mean();
     //origin += basis*meant;
     //points -= meant.replicate(1, counter);
@@ -187,7 +191,7 @@ void scan::submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_
     rgb = rgb_img.colRange(ox, ox + w).rowRange(oy, oy + h);
 }
 
-void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, bool init) const
+bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, bool init) const
 {   
     Matrix3f R = basis.transpose()*other.basis;
     Vector3f t = basis.transpose()*(other.origin - origin);
@@ -222,7 +226,7 @@ void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
         //std::cout << "Cropped width: " << pwidth << ", height: " << pheight << std::endl;
         if (maxx <= minx || maxy <= miny) {
             std::cout << "Scans are not overlapping!" << std::endl;
-            exit(0);
+            return false;
         }
     }
 
@@ -258,7 +262,7 @@ void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
     oy = miny;
     
     if (&other == this) {
-        return;
+        return true;
     }
     
     /*cv::namedWindow("Depth1", CV_WINDOW_AUTOSIZE);
@@ -274,6 +278,7 @@ void scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
     cv::namedWindow("Rgb2", CV_WINDOW_AUTOSIZE);
     cv::imshow("Rgb2", rgb_img);
     cv::waitKey(0);*/
+    return true;
 }
 
 scan::~scan()

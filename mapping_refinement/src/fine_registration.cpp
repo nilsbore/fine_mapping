@@ -39,8 +39,6 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
     Vector3f t2;
     scan2->get_transform(R2, t2);
     scan1->get_transform(R_final, t_final);
-    //R_final = R_orig; // REMOVE!
-    //t_final = t_orig; // REMOVE!
     scan1->set_transform(R_orig, t_orig);
     //R = R_final*R_orig.transpose();
     //t = t_final - R*t_orig;
@@ -49,18 +47,19 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
     std::cout << "R: \n" << R << "\nt: " << t.transpose() << std::endl;
     std::cout << "R_comp: \n" << R_comp << "\nt_comp: " << t_comp.transpose() << std::endl;
 
-    //R = R_comp;
-    //t = t_comp;
-    // DEBUG
+    //R = R_final.transpose()*R2; // REGISTRATION EVALUATION, REMOVE
+    //t = R_final.transpose()*(t2-t_final);
+    //return true;
 
+    // DEBUG
     a = AngleAxisf(R_comp);
-    if (t_comp.norm() > 0.08) {
+    if (t_comp.norm() > 0.1) {
         std::cout << "Incorrect because of translation: " << t_comp.norm() << std::endl;
-        R = R_final.transpose()*R2;
-        t = R_final.transpose()*(t2-t_final);
+        R = R_orig.transpose()*R2;
+        t = R_orig.transpose()*(t2-t_orig);
         return false;
     }
-    else if (fabs(a.angle()) > 0.05) {
+    else if (fabs(a.angle()) > 0.06) {
         std::cout << "Incorrect because of rotation: " << fabs(a.angle()) << std::endl;
         R = R_orig.transpose()*R2;
         t = R_orig.transpose()*(t2-t_orig);
@@ -70,8 +69,8 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
         std::cout << "Correct" << std::endl;
         std::cout << "Translation: " << t.norm() << std::endl;
         std::cout << "Rotation: " << fabs(a.angle()) << std::endl;
-        R = R_orig.transpose()*R2;
-        t = R_orig.transpose()*(t2-t_orig);
+        R = R_final.transpose()*R2;
+        t = R_final.transpose()*(t2-t_final);
         return true;
     }
 }
@@ -151,7 +150,9 @@ void fine_registration::compute_transform(Matrix3f& R, Vector3f& t, const cv::Ma
             p2 = scan1.reproject_point(x+fxy.x, y+fxy.y, z2);
             //delta = 0.0005*Vector3f(fxy.x, fxy.y, 0.0*diff);
             x1.col(counter) = p1;
-            x2.col(counter) = p1 + (p2 - p1);//point + delta;
+            Vector3f diff = (p2 - p1);
+            diff(2) *= 0.5;
+            x2.col(counter) = p1 + diff;//point + delta;
 
             ++counter;
         }
@@ -188,12 +189,16 @@ float fine_registration::compute_error(const cv::Mat& depth2, const cv::Mat& dep
 
 void fine_registration::step(Matrix3f& R, Vector3f& t)
 {
+    R.setIdentity();
+    t.setZero();
     cv::Mat depth2, rgb2;
     cv::Mat depth1, rgb1;
     size_t ox, oy;
     bool behind = scan1.is_behind(scan2);
     if (behind) {
-        scan1.project(depth2, rgb2, ox, oy, scan2);
+        if (!scan1.project(depth2, rgb2, ox, oy, scan2)) {
+            return;
+        }
         if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
             std::cout << "Scans not overlapping!" << std::endl;
             std::cout << "ox: " << ox << std::endl;
@@ -202,7 +207,9 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
         scan1.submatrices(depth1, rgb1, ox, oy, depth2.cols, depth2.rows);
     }
     else {
-        scan2.project(depth2, rgb2, ox, oy, scan1);
+        if (!scan2.project(depth2, rgb2, ox, oy, scan1)) {
+            return;
+        }
         if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
             std::cout << "Scans not overlapping!" << std::endl;
             std::cout << "ox: " << ox << std::endl;

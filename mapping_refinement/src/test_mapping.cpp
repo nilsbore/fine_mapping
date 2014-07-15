@@ -156,6 +156,7 @@ int main(int argc, char** argv)
     // good information
     Eigen::Matrix<double, 6, 6> good_info;
     good_info.setIdentity();
+    good_info.bottomRightCorner<3, 3>() *= 100.0;
 
     // bad information
     Eigen::Matrix<double, 6, 6> bad_info;
@@ -173,7 +174,7 @@ int main(int argc, char** argv)
             odometry->setInformation(good_info);
         }
         else {
-            odometry->setInformation(bad_info);
+            odometry->setInformation(good_info);//bad_info
         }
         optimizer.addEdge(odometry);
     }
@@ -191,6 +192,11 @@ int main(int argc, char** argv)
         R = transform.topLeftCorner<3, 3>();
         t = transform.block<3, 1>(0, 3);
         scans[i]->set_transform(R, t);
+    }
+
+    for (g2o::HyperGraph::Edge* e : optimizer.edges()) {
+        g2o::EdgeSE3* es = (g2o::EdgeSE3*)e;
+        std::cout << es->error().transpose() << std::endl;
     }
 
     view_registered_pointclouds(scan_files, scans);
