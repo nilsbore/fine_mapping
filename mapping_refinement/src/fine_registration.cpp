@@ -234,7 +234,7 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::Mat binary;
     cv::bitwise_or(depth1 == 0, depth2 == 0, binary);
     
-    if (true) {
+    if (false) {
         int morph_size = 4;
 
         int morph_type = cv::MORPH_ELLIPSE;
@@ -262,8 +262,41 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::Mat gray2, gray1, flow, cflow;
     cvtColor(rgb2, gray2, CV_RGB2GRAY);
     cvtColor(rgb1, gray1, CV_RGB2GRAY);
-    cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN
 
+#ifdef WITH_GPU
+    cv::gpu::GpuMat gpu1;
+    if (behind) {
+        gpu1 = gpugray1(cv::Rect(ox, oy, depth2.cols, depth2.rows));
+    }
+    else {
+        gpu1 = gpugray2(cv::Rect(ox, oy, depth2.cols, depth2.rows));
+    }
+    cv::gpu::FarnebackOpticalFlow opflow;
+    opflow.pyrScale = pyr_scale;
+    opflow.numLevels = levels;
+    opflow.winSize = winsize;
+    opflow.numIters = iterations;
+    opflow.polyN = poly_n;
+    opflow.polySigma = poly_sigma;
+    opflow.flags = 0;
+    float scale = 0.8;
+    float alpha = 0.197;
+    float gamma = 50.0;
+    int inner_iterations = 10;
+    int outer_iterations = 77;
+    int solver_iterations = 10;
+    //cv::gpu::BroxOpticalFlow broxflow(alpha, gamma, scale, inner_iterations, outer_iterations, solver_iterations);
+    cv::gpu::GpuMat gpu2, gpuflowx, gpuflowy;
+    gpu2.upload(gray2);
+
+    opflow(gpu1, gpu2, gpuflowx, gpuflowy);
+    cv::Mat flowx(gpuflowx);
+    cv::Mat flowy(gpuflowy);
+    std::vector<cv::Mat> flowar = {flowx, flowy};
+    cv::merge(flowar, flow);
+#else
+    cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN
+#endif
     /*std::vector<cv::Mat> channels1(3);
     // split img:
     cv::split(rgb1, channels1);
@@ -273,21 +306,24 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::split(rgb2, channels2);
     cv::calcOpticalFlowFarneback(channels1[2], channels2[2], flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0); // cv::OPTFLOW_FARNEBACK_GAUSSIAN*/
 
-    cv::cvtColor(gray1, cflow, CV_GRAY2BGR);
-    std::vector<cv::Mat> images(3);
-    //images.at(0) = channels2[2]; //gray2; //for blue channel
-    images.at(0) = gray2; //for blue channel
-    //images.at(1) = cv::Mat::zeros(channels2[2].rows, channels2[2].cols, channels2[2].type()); //cv::Mat::zeros(gray2.rows, gray2.cols, gray2.type());   //for green channel
-    images.at(1) = cv::Mat::zeros(gray2.rows, gray2.cols, gray2.type());   //for green channel
-    //images.at(2) = channels1[2]; //gray1;  //for red channel
-    images.at(2) = gray1;  //for red channel
+    bool draw_flow = true;
     cv::Mat colorImage;
-    cv::merge(images, colorImage);
-    cv::namedWindow("Diff", CV_WINDOW_AUTOSIZE);
-    cv::imshow("Diff", colorImage);
-    cv::waitKey(10);
+    if (draw_flow) {
+        cv::cvtColor(gray1, cflow, CV_GRAY2BGR);
+        std::vector<cv::Mat> images(3);
+        //images.at(0) = channels2[2]; //gray2; //for blue channel
+        images.at(0) = gray2; //for blue channel
+        //images.at(1) = cv::Mat::zeros(channels2[2].rows, channels2[2].cols, channels2[2].type()); //cv::Mat::zeros(gray2.rows, gray2.cols, gray2.type());   //for green channel
+        images.at(1) = cv::Mat::zeros(gray2.rows, gray2.cols, gray2.type());   //for green channel
+        //images.at(2) = channels1[2]; //gray1;  //for red channel
+        images.at(2) = gray1;  //for red channel
+        cv::merge(images, colorImage);
+        cv::namedWindow("Diff", CV_WINDOW_AUTOSIZE);
+        cv::imshow("Diff", colorImage);
+        cv::waitKey(10);
 
-    drawOptFlowMap(flow, colorImage, binary, 20, 1.0, CV_RGB(0, 255, 0));
+        drawOptFlowMap(flow, colorImage, binary, 20, 1.0, CV_RGB(0, 255, 0));
+    }
     
     //cv::Mat depth16, depth116;
     //depth.convertTo(depth16, CV_16U, 8.0*1000.0);
@@ -301,13 +337,15 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
 
     compute_transform(R, t, depth2, depth1, flow, binary);
 
-    int midx = colorImage.cols/2;
-    int midy = colorImage.rows/2;
-    line(colorImage, cv::Point(midx, midy), cv::Point(midx+cvRound(1000*t(0)), midy+cvRound(1000*t(1))), CV_RGB(255, 0, 0));
-    circle(colorImage, cv::Point(midx,midy), 2, CV_RGB(255, 0, 0), -1);
-    cv::namedWindow("Flow", CV_WINDOW_AUTOSIZE);
-    cv::imshow("Flow", colorImage);
-    cv::waitKey(10);
+    if (draw_flow) {
+        int midx = colorImage.cols/2;
+        int midy = colorImage.rows/2;
+        line(colorImage, cv::Point(midx, midy), cv::Point(midx+cvRound(1000*t(0)), midy+cvRound(1000*t(1))), CV_RGB(255, 0, 0));
+        circle(colorImage, cv::Point(midx,midy), 2, CV_RGB(255, 0, 0), -1);
+        cv::namedWindow("Flow", CV_WINDOW_AUTOSIZE);
+        cv::imshow("Flow", colorImage);
+        cv::waitKey(10);
+    }
 
     Matrix3f Rt = R.transpose();
     if (!behind) {

@@ -7,8 +7,6 @@
 
 class scan {
 protected:
-    cv::Mat depth_img;
-    cv::Mat rgb_img;
     Eigen::MatrixXf points;
     uint8_t* red;
     uint8_t* green;
@@ -21,6 +19,8 @@ protected:
     void initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Eigen::Vector3f& origin, const Eigen::Matrix3f& basis, const Eigen::Matrix3f& K);
     void camera_cone(Eigen::ArrayXXf& confining_points) const;
 public:
+    cv::Mat depth_img;
+    cv::Mat rgb_img;
     void set_transform(const Eigen::Matrix3f& R, const Eigen::Vector3f& t);
     void get_transform(Eigen::Matrix3f& R, Eigen::Vector3f& t) { R = basis; t = origin; }
     void transform(const Eigen::Matrix3f& R, const Eigen::Vector3f& t);

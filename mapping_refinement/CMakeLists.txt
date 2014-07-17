@@ -12,12 +12,15 @@ find_package(catkin REQUIRED COMPONENTS std_msgs roscpp sensor_msgs std_msgs pcl
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
-find_package(OpenCV REQUIRED)
+#find_package(OpenCV REQUIRED)
 
 find_package(PCL REQUIRED)
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
+
+include_directories("/home/nbore/Installs/opencv/include")
+link_directories("/home/nbore/Installs/opencv/release/lib")
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -82,6 +85,7 @@ add_library(fine_vertex src/fine_vertex.cpp include/fine_vertex.h)
 ## Declare a cpp executable
 add_executable(save_scan src/save_scan.cpp)
 add_executable(test_projection src/test_projection.cpp)
+add_executable(test_cuda src/test_cuda.cpp)
 add_executable(test_mapping src/test_mapping.cpp)
 add_executable(test_icp_mapping src/test_icp_mapping.cpp)
 add_executable(test_compare_registration src/test_compare_registration.cpp)
@@ -95,7 +99,8 @@ add_dependencies(save_scan mapping_refinement_generate_messages_cpp)
 target_link_libraries(save_scan
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-  ${OpenCV_LIBS}
+  #${OpenCV_LIBS}
+  opencv2_all
 )
 
 target_link_libraries(scan
@@ -106,7 +111,8 @@ target_link_libraries(scan
 target_link_libraries(fine_registration
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-  ${OpenCV_LIBS}
+  #${OpenCV_LIBS}
+  opencv2_all
   scan
 )
 
@@ -135,6 +141,12 @@ target_link_libraries(test_projection
   scan
   fine_registration
   asynch_visualizer
+)
+
+target_link_libraries(test_cuda
+  ${catkin_LIBRARIES}
+  #${OpenCV_LIBS}
+  opencv2_all
 )
 
 target_link_libraries(test_mapping

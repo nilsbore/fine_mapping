@@ -2,13 +2,20 @@
 #define FINE_REGISTRATION_H
 
 #include <Eigen/Dense>
+#include <opencv2/gpu/gpu.hpp>
 #include "scan.h"
+
+#define WITH_GPU
 
 class fine_registration {
 protected:
     float last_error;
     scan& scan1;
     scan& scan2;
+#ifdef WITH_GPU
+    cv::gpu::GpuMat gpugray1;
+    cv::gpu::GpuMat gpugray2;
+#endif
     // dense optical flow parameters
     double pyr_scale; // parameter, specifying the image scale (<1) to build pyramids for each image; pyr_scale=0.5 means a classical pyramid, where each next layer is twice smaller than the previous one.
     int levels; // number of pyramid layers including the initial image; levels=1 means that no extra layers are created and only the original images are used.
@@ -32,10 +39,25 @@ public:
     {
         pyr_scale = 0.5;
         levels = 3;
-        winsize = 200; // 100
+        winsize = 100;//200; // 100
         iterations = 2; // 3
-        poly_n = 9;//5;
+        poly_n = 7;//9;//5;
         poly_sigma = 3.0;//3.2;
+        /*numLevels = 5;
+        pyrScale = 0.5;
+        fastPyramids = false;
+        winSize = 13;
+        numIters = 10;
+        polyN = 5;
+        polySigma = 1.1;
+        flags = 0;*/
+#ifdef WITH_GPU
+        cv::Mat gray1, gray2;
+        cvtColor(scan1.rgb_img, gray1, CV_RGB2GRAY);
+        cvtColor(scan2.rgb_img, gray2, CV_RGB2GRAY);
+        gpugray1.upload(gray1);
+        gpugray2.upload(gray2);
+#endif
     }
 };
 #endif // FINE_REGISTRATION_H
