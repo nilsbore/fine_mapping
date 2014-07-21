@@ -38,11 +38,11 @@ public:
     fine_registration(scan& scan1, scan& scan2) : scan1(scan1), scan2(scan2)
     {
         pyr_scale = 0.5;
-        levels = 3;
+        levels = 3;//5;
         winsize = 100;//200; // 100
         iterations = 2; // 3
         poly_n = 7;//9;//5;
-        poly_sigma = 3.0;//3.2;
+        poly_sigma = 3.0;//1.3;//3.0;//3.2;
         /*numLevels = 5;
         pyrScale = 0.5;
         fastPyramids = false;

@@ -2,11 +2,14 @@
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <ctime>
 
 using namespace Eigen;
 
 bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, scan* scan2)
 {
+    clock_t begin = std::clock();
+
     Matrix3f R_comp;
     R_comp.setIdentity();
     Vector3f t_comp;
@@ -44,12 +47,15 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
     //t = t_final - R*t_orig;
 
     // DEBUG
-    std::cout << "R: \n" << R << "\nt: " << t.transpose() << std::endl;
-    std::cout << "R_comp: \n" << R_comp << "\nt_comp: " << t_comp.transpose() << std::endl;
+    //std::cout << "R: \n" << R << "\nt: " << t.transpose() << std::endl;
+    //std::cout << "R_comp: \n" << R_comp << "\nt_comp: " << t_comp.transpose() << std::endl;
 
     //R = R_final.transpose()*R2; // REGISTRATION EVALUATION, REMOVE
     //t = R_final.transpose()*(t2-t_final);
     //return true;
+
+    clock_t end = std::clock();
+    std::cout << "Took " << double(end - begin) / CLOCKS_PER_SEC << "s" << std::endl;
 
     // DEBUG
     a = AngleAxisf(R_comp);
@@ -279,16 +285,15 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     opflow.polyN = poly_n;
     opflow.polySigma = poly_sigma;
     opflow.flags = 0;
-    float scale = 0.8;
+    /*float scale = 0.8;
     float alpha = 0.197;
     float gamma = 50.0;
     int inner_iterations = 10;
     int outer_iterations = 77;
     int solver_iterations = 10;
-    //cv::gpu::BroxOpticalFlow broxflow(alpha, gamma, scale, inner_iterations, outer_iterations, solver_iterations);
+    cv::gpu::BroxOpticalFlow broxflow(alpha, gamma, scale, inner_iterations, outer_iterations, solver_iterations);*/
     cv::gpu::GpuMat gpu2, gpuflowx, gpuflowy;
     gpu2.upload(gray2);
-
     opflow(gpu1, gpu2, gpuflowx, gpuflowy);
     cv::Mat flowx(gpuflowx);
     cv::Mat flowy(gpuflowy);
