@@ -80,17 +80,8 @@ void scan::initialize_from_files(const std::string& pcdname, const std::string& 
 
 void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vector3f& eorigin, const Matrix3f& ebasis, const Matrix3f& K)
 {
-    static int one = 0;
     origin = eorigin;
-    Matrix3f R = Matrix3f(AngleAxisf(-0.02*M_PI, Vector3f::UnitZ()));
-    //basis = R*ebasis; // DEBUG!! Remove later!!
-    //origin += Vector3f(0.0, 0.0, 0.0);
     basis = ebasis;
-    if (one == 0) {
-        //origin += Vector3f(0.0, 0.1, 0.0);
-        //basis = R*basis;
-    }
-    one += 1.0;
     size_t n = cloud.points.size(); 
     points.resize(3, n);
     red = new uint8_t[n];
@@ -112,9 +103,6 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
         ROS_INFO("No points in cloud...");
         return;
     }
-    //VectorXf meant = points.rowwise().mean();
-    //origin += basis*meant;
-    //points -= meant.replicate(1, counter);
     fx = K(0, 0);
     fy = K(1, 1);
     cx = K(0, 2);

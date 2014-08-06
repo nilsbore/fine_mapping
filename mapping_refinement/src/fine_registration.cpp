@@ -188,11 +188,6 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
         if (!scan1.project(depth2, rgb2, ox, oy, scan2, scale)) {
             return;
         }
-        if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
-            std::cout << "Scans not overlapping!" << std::endl;
-            std::cout << "ox: " << ox << std::endl;
-            std::cout << "oy: " << oy << std::endl;
-        }
         cv::Rect roi(ox, oy, depth2.cols, depth2.rows);
         depth1 = depths1[iteration](roi);
         rgb1 = rgbs1[iteration](roi);
@@ -201,14 +196,15 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
         if (!scan2.project(depth2, rgb2, ox, oy, scan1, scale)) {
             return;
         }
-        if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
-            std::cout << "Scans not overlapping!" << std::endl;
-            std::cout << "ox: " << ox << std::endl;
-            std::cout << "oy: " << oy << std::endl;
-        }
         cv::Rect roi(ox, oy, depth2.cols, depth2.rows);
         depth1 = depths2[iteration](roi);
         rgb1 = rgbs2[iteration](roi);
+    }
+
+    if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
+        std::cout << "Scans not overlapping!" << std::endl;
+        std::cout << "ox: " << ox << std::endl;
+        std::cout << "oy: " << oy << std::endl;
     }
     
     cv::Mat binary;
