@@ -137,7 +137,7 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
     ROS_INFO("Max depth %f", maxz);
     
     size_t ox, oy;
-    project(depth_img, rgb_img, ox, oy, *this, true);
+    project(depth_img, rgb_img, ox, oy, *this, 1.0, true);
     ArrayXXf confining_points;
     camera_cone(confining_points);
 }
@@ -172,11 +172,11 @@ void scan::camera_cone(ArrayXXf& confining_points) const
     confining_points.row(1) = 1.0/fy*(confining_points.row(1) - cy)*confining_points.row(2);
 }
 
-Vector3f scan::reproject_point(int x, int y, float depth) const
+Vector3f scan::reproject_point(int x, int y, float depth, float scale) const
 {
     Vector3f rtn(float(x), float(y), depth);
-    rtn(0) = 1.0/fx*(rtn(0) - cx)*rtn(2);
-    rtn(1) = 1.0/fy*(rtn(1) - cy)*rtn(2);
+    rtn(0) = scale/fx*(rtn(0) - cx/scale)*rtn(2);
+    rtn(1) = scale/fy*(rtn(1) - cy/scale)*rtn(2);
     return rtn;
 }
 
@@ -185,22 +185,27 @@ bool scan::is_behind(const scan& other) const {
     return t(2) > 0;
 }
 
-void scan::submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_t w, size_t h)
+auto scan::submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_t w, size_t h) -> void
 {
     depth = depth_img.colRange(ox, ox + w).rowRange(oy, oy + h);
     rgb = rgb_img.colRange(ox, ox + w).rowRange(oy, oy + h);
 }
 
-bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, bool init) const
+bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, float scale, bool init) const
 {   
     Matrix3f R = basis.transpose()*other.basis;
     Vector3f t = basis.transpose()*(other.origin - origin);
+
+    float scaled_fx = fx / scale;
+    float scaled_fy = fy / scale;
+    float scaled_cx = cx / scale;
+    float scaled_cy = cy / scale;
     
     int pwidth, pheight;
     int minx, miny;
     if (init) {
-        pwidth = width;
-        pheight = height;
+        pwidth = width / int(scale);
+        pheight = height / int(scale);
         minx = miny = 0;
     }
     else {
@@ -209,16 +214,16 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
         confining_points = R*confining_points.matrix();
         confining_points.matrix() += t.replicate(1, 8);
 
-        confining_points.row(0) = fx*confining_points.row(0)/confining_points.row(2) + cx;
-        confining_points.row(1) = fy*confining_points.row(1)/confining_points.row(2) + cy;
+        confining_points.row(0) = scaled_fx*confining_points.row(0)/confining_points.row(2) + scaled_cx;
+        confining_points.row(1) = scaled_fy*confining_points.row(1)/confining_points.row(2) + scaled_cy;
         minx = int(confining_points.row(0).minCoeff());
         int maxx = int(confining_points.row(0).maxCoeff());
         miny = int(confining_points.row(1).minCoeff());
         int maxy = int(confining_points.row(1).maxCoeff());
         minx = std::max(minx, 0);
         miny = std::max(miny, 0);
-        maxx = std::min(maxx, int(width)); // + 0.5?
-        maxy = std::min(maxy, int(height));
+        maxx = std::min(maxx, int(width) / int(scale)); // + 0.5?
+        maxy = std::min(maxy, int(height) / int(scale));
 
         pwidth = maxx - minx;
         pheight = maxy - miny;
@@ -230,24 +235,34 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
         }
     }
 
-    MatrixXf copy = other.points;
-    size_t n = copy.cols();
-    copy = R*copy;
-    copy += t.replicate(1, n);
-    
-    copy.row(0) = fx*copy.row(0).array()/copy.row(2).array() + cx; // *=, +=
-    copy.row(1) = fy*copy.row(1).array()/copy.row(2).array() + cy;
+    //MatrixXf copy = other.points;
+    //const size_t n = copy.cols();
+    const size_t n = other.points.cols();
+    //copy = R*copy;
+    //copy += t.replicate(1, n);
+    //copy.array().colwise() += t.array();
+
+    /*copy.row(0) = scaled_fx*copy.row(0).array()/copy.row(2).array() + scaled_cx;
+    copy.row(1) = scaled_fy*copy.row(1).array()/copy.row(2).array() + scaled_cy;*/
+    /*copy.row(0).array() /= 1.0/scaled_fx*copy.row(2).array();
+    copy.row(0).array() += scaled_cx;
+    copy.row(1).array() /= 1.0/scaled_fy*copy.row(2).array();
+    copy.row(1).array() += scaled_cy;*/
     
     depth = cv::Mat::zeros(pheight, pwidth, CV_32FC1);
     rgb = cv::Mat::zeros(pheight, pwidth, CV_8UC3);
     
     int x, y;
     float z, curr_z;
+    Vector3f vec;
     for (size_t i = 0; i < n; ++i) {
-        x = int(copy(0, i)) - minx;
-        y = int(copy(1, i)) - miny;
+        //x = int(copy(0, i)) - minx;
+        //y = int(copy(1, i)) - miny;
+        vec = R*other.points.col(i) + t;
+        x = int(scaled_fx*vec(0)/vec(2)+scaled_cx) - minx;
+        y = int(scaled_fy*vec(1)/vec(2)+scaled_cy) - miny;
         if (x >= 0 && x < pwidth && y >= 0 && y < pheight) {
-            z = copy(2, i);
+            z = vec(2);
             curr_z = depth.at<float>(y, x);
             if (curr_z == 0 || curr_z > z) {
                 depth.at<float>(y, x) = z;

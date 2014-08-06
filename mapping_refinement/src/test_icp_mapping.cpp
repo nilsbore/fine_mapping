@@ -1,9 +1,5 @@
-
 #include "scan.h"
 #include "fine_registration.h"
-#include "asynch_visualizer.h"
-#include "fine_edge.h"
-#include "fine_vertex.h"
 
 #include <Eigen/Dense>
 #include <pcl/visualization/pcl_visualizer.h>
@@ -21,7 +17,6 @@
 #include "g2o/solvers/pcg/linear_solver_pcg.h"
 #include "g2o/types/slam3d/edge_se3.h"
 #include "g2o/types/slam3d/vertex_se3.h"
-//#include "g2o/core/hyper_graph.h"
 
 #include <string>
 
@@ -157,7 +152,7 @@ bool register_clouds_icp(Eigen::Matrix3f& R, Eigen::Vector3f& t,
 void compute_initial_transformation(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan* scan1, scan* scan2)
 {
     Eigen::AngleAxisf a(R);
-    if (a.angle() < 0.06 && t.norm() < 0.1) {
+    if (a.angle() < 0.4 && t.norm() < 0.1) {
         return;
     }
     Eigen::Matrix3f R1, R2;
@@ -189,9 +184,6 @@ int main(int argc, char** argv)
     size_t n = 34;
     // set the filenames for the pointclouds and transforms, initialize scan objects
     for (size_t i = 0; i < n; ++i) {
-        /*if (i % 2 == 1) {
-            continue;
-        }*/
         std::stringstream ss;
         ss << std::setfill('0') << std::setw(6) << i;
         scan_files.push_back(folder + std::string("/shot") + ss.str() + std::string(".pcd"));
@@ -209,7 +201,7 @@ int main(int argc, char** argv)
         pcl::removeNaNFromPointCloud(*input_cloud, *finite_cloud, inds);
         pcl::VoxelGrid<pcl::PointXYZRGB> sor;
         sor.setInputCloud(finite_cloud);
-        sor.setLeafSize(0.005f, 0.005f, 0.005f);
+        sor.setLeafSize(0.01f, 0.01f, 0.01f);
         sor.filter(*clouds.back());
 
     }

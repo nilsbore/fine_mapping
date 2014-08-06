@@ -1,8 +1,5 @@
 #include "scan.h"
 #include "fine_registration.h"
-#include "asynch_visualizer.h"
-#include "fine_edge.h"
-#include "fine_vertex.h"
 
 #include <Eigen/Dense>
 #include <pcl/visualization/pcl_visualizer.h>
@@ -68,6 +65,22 @@ void view_registered_pointclouds(std::vector<std::string>& cloud_files, std::vec
     viewer->close();
 }
 
+void compute_initial_transformation(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan* scan1, scan* scan2)
+{
+    Eigen::AngleAxisf a(R);
+    if (a.angle() < 0.4 && t.norm() < 0.1) {
+        std::cout << "Correct, angle: " << a.angle() << ", translation: " << t.norm() << std::endl;
+        return;
+    }
+    std::cout << "Incorrect, angle: " << a.angle() << ", translation: " << t.norm() << std::endl;
+    Eigen::Matrix3f R1, R2;
+    Eigen::Vector3f t1, t2;
+    scan1->get_transform(R1, t1);
+    scan2->get_transform(R2, t2);
+    R = R1.transpose()*R2;
+    t = R1.transpose()*(t2-t1);
+}
+
 int main(int argc, char** argv)
 {
     typedef g2o::BlockSolver<g2o::BlockSolverTraits<-1, -1> >  SlamBlockSolver;
@@ -88,9 +101,6 @@ int main(int argc, char** argv)
     size_t n = 34;
     // set the filenames for the pointclouds and transforms, initialize scan objects
     for (size_t i = 0; i < n; ++i) {
-        /*if (i % 2 == 1) {
-            continue;
-        }*/
         std::stringstream ss;
         ss << std::setfill('0') << std::setw(6) << i;
         scan_files.push_back(folder + std::string("/shot") + ss.str() + std::string(".pcd"));
@@ -127,6 +137,7 @@ int main(int argc, char** argv)
         size_t k = (i+2)%n;
         if (i % 2 == 0) {
             correct = fine_registration::register_scans(R, t, scans[i], scans[j]);
+            compute_initial_transformation(R, t, scans[i], scans[j]);
             T.topLeftCorner<3, 3>() = R.cast<double>();
             T.block<3, 1>(0, 3) = t.cast<double>();
             Eigen::Isometry3d transform(T);
@@ -135,6 +146,7 @@ int main(int argc, char** argv)
             measurement_correct.push_back(correct);
         }
         correct = fine_registration::register_scans(R, t, scans[i], scans[k]);
+        compute_initial_transformation(R, t, scans[i], scans[k]);
         T.topLeftCorner<3, 3>() = R.cast<double>();
         T.block<3, 1>(0, 3) = t.cast<double>();
         Eigen::Isometry3d transform(T);

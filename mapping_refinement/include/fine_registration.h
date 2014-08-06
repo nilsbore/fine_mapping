@@ -5,13 +5,19 @@
 #include <opencv2/gpu/gpu.hpp>
 #include "scan.h"
 
-#define WITH_GPU
+//#define WITH_GPU
 
 class fine_registration {
 protected:
     float last_error;
+    size_t iteration;
     scan& scan1;
     scan& scan2;
+    std::vector<float> scales;
+    std::vector<cv::Mat> rgbs1;
+    std::vector<cv::Mat> rgbs2;
+    std::vector<cv::Mat> depths1;
+    std::vector<cv::Mat> depths2;
 #ifdef WITH_GPU
     cv::gpu::GpuMat gpugray1;
     cv::gpu::GpuMat gpugray2;
@@ -25,7 +31,7 @@ protected:
     double poly_sigma; // standard deviation of the Gaussian that is used to smooth derivatives used as a basis for the polynomial expansion; for poly_n=5, you can set poly_sigma=1.1, for poly_n=7, a good value would be poly_sigma=1.5.
     float compute_error(const cv::Mat& depth, const cv::Mat& wdepth, const cv::Mat& invalid) const;
     void compute_transform(Eigen::Matrix3f &R, Eigen::Vector3f &t, const cv::Mat& depth, const cv::Mat& wdepth,
-                           const cv::Mat& flow, const cv::Mat& invalid) const;
+                           const cv::Mat& flow, const cv::Mat& invalid, float scale) const;
     static void get_transformation_from_correlation(const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>& cloud_src_demean,
                                                     const Eigen::Vector3f& centroid_src,
                                                     const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>& cloud_tgt_demean,
@@ -39,18 +45,16 @@ public:
     {
         pyr_scale = 0.5;
         levels = 3;//5;
-        winsize = 100;//200; // 100
+        winsize = 50;//200; // 100
         iterations = 2; // 3
-        poly_n = 7;//9;//5;
-        poly_sigma = 3.0;//1.3;//3.0;//3.2;
-        /*numLevels = 5;
-        pyrScale = 0.5;
-        fastPyramids = false;
-        winSize = 13;
-        numIters = 10;
-        polyN = 5;
-        polySigma = 1.1;
-        flags = 0;*/
+        poly_n = 5;//9;//5;
+        poly_sigma = 1.0;//1.3;//3.0;//3.2;
+        /*levels = 5;
+        pyr_scale = 0.5;
+        winsize = 13;
+        iterations = 10;
+        poly_n = 5;
+        poly_sigma = 1.1;*/
 #ifdef WITH_GPU
         cv::Mat gray1, gray2;
         cvtColor(scan1.rgb_img, gray1, CV_RGB2GRAY);
@@ -58,6 +62,17 @@ public:
         gpugray1.upload(gray1);
         gpugray2.upload(gray2);
 #endif
+        iteration = 0;
+        size_t ox, oy;
+        scales = {1.0};//{8.0, 4.0, 2.0, 1.0};
+        rgbs1.resize(scales.size());
+        rgbs2.resize(scales.size());
+        depths1.resize(scales.size());
+        depths2.resize(scales.size());
+        for (size_t i = 0; i < scales.size(); ++i) {
+            scan1.project(depths1[i], rgbs1[i], ox, oy, scan1, scales[i], true);
+            scan2.project(depths2[i], rgbs2[i], ox, oy, scan2, scales[i], true);
+        }
     }
 };
 #endif // FINE_REGISTRATION_H

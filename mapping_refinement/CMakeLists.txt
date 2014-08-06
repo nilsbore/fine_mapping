@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(mapping_refinement)
 
-add_definitions(-std=c++0x)
+add_definitions(-std=c++0x -O4 -DNDEBUG)
 #set(CMAKE_CXX_FLAGS "-DCMAKE_BUILD_TYPE=Debug -Wall -fPIC -std=c++0x")
 
 ## Find catkin macros and libraries
