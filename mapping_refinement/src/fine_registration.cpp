@@ -10,11 +10,6 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
 {
     clock_t begin = std::clock();
 
-    Matrix3f R_comp;
-    R_comp.setIdentity();
-    Vector3f t_comp;
-    t_comp.setZero();
-
     Matrix3f R_orig;
     Vector3f t_orig;
     scan1->get_transform(R_orig, t_orig);
@@ -25,8 +20,6 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
         r.step(R, t);
         scan1->transform(R, t);
         a = AngleAxisf(R);
-        R_comp = R_comp*R; // add to total rotation
-        t_comp += R_comp*t; // add to total translation
         ++counter;
     }
     while (counter < 20 && (t.norm() > 0.003 || fabs(a.angle()) > 0.0005));

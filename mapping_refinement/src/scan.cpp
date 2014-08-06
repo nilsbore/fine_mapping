@@ -173,7 +173,7 @@ bool scan::is_behind(const scan& other) const {
     return t(2) > 0;
 }
 
-auto scan::submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_t w, size_t h) -> void
+void scan::submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_t w, size_t h)
 {
     depth = depth_img.colRange(ox, ox + w).rowRange(oy, oy + h);
     rgb = rgb_img.colRange(ox, ox + w).rowRange(oy, oy + h);

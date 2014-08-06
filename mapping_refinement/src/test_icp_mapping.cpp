@@ -151,16 +151,18 @@ bool register_clouds_icp(Eigen::Matrix3f& R, Eigen::Vector3f& t,
 
 void compute_initial_transformation(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan* scan1, scan* scan2)
 {
-    Eigen::AngleAxisf a(R);
-    if (a.angle() < 0.4 && t.norm() < 0.1) {
-        return;
-    }
-    Eigen::Matrix3f R1, R2;
-    Eigen::Vector3f t1, t2;
+    Eigen::Matrix3f R1, R2, Rd;
+    Eigen::Vector3f t1, t2, td;
     scan1->get_transform(R1, t1);
     scan2->get_transform(R2, t2);
-    R = R1.transpose()*R2;
-    t = R1.transpose()*(t2-t1);
+    Rd = R1.transpose()*R2;
+    td = R1.transpose()*(t2-t1);
+    Eigen::AngleAxisf a(Rd.transpose()*R);
+    if (a.angle() < 0.06 && (t - td).norm() < 0.1) {
+        std::cout << "Correct, angle: " << a.angle() << ", translation: " << (t - td).norm() << std::endl;
+        return;
+    }
+    std::cout << "Incorrect, angle: " << a.angle() << ", translation: " << (t - td).norm() << std::endl;
 }
 
 int main(int argc, char** argv)
