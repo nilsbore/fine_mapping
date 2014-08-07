@@ -175,7 +175,7 @@ void scan::reproject(pcl::PointCloud<pcl::PointXYZRGB>& cloud, cv::Mat* counter)
     pcl::PointXYZRGB point;
     for (size_t y = 0; y < height; ++y) {
         for (size_t x = 0; x < width; ++x) {
-            if (counter != NULL && counter->at<int32_t>(y, x) == -1) {
+            if (counter != NULL && counter->at<uchar>(y, x) == 0) {
                 continue;
             }
             depth = depth_img.at<float>(y, x);
