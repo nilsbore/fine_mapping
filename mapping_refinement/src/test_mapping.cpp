@@ -1,5 +1,6 @@
 #include "scan.h"
 #include "fine_registration.h"
+#include "stitched_map.h"
 
 #include <Eigen/Dense>
 #include <pcl/visualization/pcl_visualizer.h>
@@ -67,6 +68,7 @@ void view_registered_pointclouds(std::vector<std::string>& cloud_files, std::vec
 
 void compute_initial_transformation(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan* scan1, scan* scan2)
 {
+    return;
     Eigen::Matrix3f R1, R2, Rd;
     Eigen::Vector3f t1, t2, td;
     scan1->get_transform(R1, t1);
@@ -211,7 +213,9 @@ int main(int argc, char** argv)
         std::cout << es->error().transpose() << std::endl;
     }
 
-    view_registered_pointclouds(scan_files, scans);
+    //view_registered_pointclouds(scan_files, scans);
+    stitched_map map(scans);
+    map.visualize();
 
     return 0;
 }

@@ -12,13 +12,11 @@ using namespace Eigen;
 
 scan::scan(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vector3f& origin, const Matrix3f& basis, const Matrix3f& K)
 {
-    red = green = blue = NULL;
     initialize(cloud, origin, basis, K);
 }
 
 scan::scan(const std::string& pcdname, const std::string& tname)
 {
-    red = green = blue = NULL;
     initialize_from_files(pcdname, tname);
 }
 
@@ -82,24 +80,19 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
 {
     origin = eorigin;
     basis = ebasis;
-    size_t n = cloud.points.size(); 
-    points.resize(3, n);
-    red = new uint8_t[n];
-    green = new uint8_t[n];
-    blue = new uint8_t[n];
-    size_t counter = 0;
-    for (size_t i = 0; i < n; ++i) {
-        if (isnan(cloud.points[i].z) || isinf(cloud.points[i].z)) {
+    pcl::copyPointCloud(cloud, points);
+    minz = INFINITY;
+    maxz = 0.0;
+    bool empty = true;
+    for (const pcl::PointXYZRGB& point : points.points) {
+        if (isnan(point.z ) || isinf(point.z )) {
             continue;
         }
-        points.col(counter) = cloud.points[i].getVector3fMap();
-        red[counter] = cloud.points[i].r;
-        green[counter] = cloud.points[i].g;
-        blue[counter] = cloud.points[i].b;
-        ++counter;
+        empty = false;
+        maxz = std::max(maxz, point.z);
+        minz = std::min(minz, point.z);
     }
-    points.conservativeResize(3, counter);
-    if (counter == 0) {
+    if (empty) {
         ROS_INFO("No points in cloud...");
         return;
     }
@@ -107,8 +100,6 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
     fy = K(1, 1);
     cx = K(0, 2);
     cy = K(1, 2);
-    minz = points.row(2).minCoeff();
-    maxz = points.row(2).maxCoeff();
     height = 480; // get from camerainfo
     width = 640;
     
@@ -126,8 +117,6 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
     
     size_t ox, oy;
     project(depth_img, rgb_img, ox, oy, *this, 1.0, true);
-    ArrayXXf confining_points;
-    camera_cone(confining_points);
 }
 
 void scan::set_transform(const Eigen::Matrix3f& R, const Eigen::Vector3f& t)
@@ -179,7 +168,30 @@ void scan::submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_
     rgb = rgb_img.colRange(ox, ox + w).rowRange(oy, oy + h);
 }
 
-bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, float scale, bool init) const
+void scan::reproject(pcl::PointCloud<pcl::PointXYZRGB>& cloud, cv::Mat* counter) const
+{
+    cloud.reserve(height*width);
+    float depth;
+    pcl::PointXYZRGB point;
+    for (size_t y = 0; y < height; ++y) {
+        for (size_t x = 0; x < width; ++x) {
+            if (counter != NULL && counter->at<int32_t>(y, x) == -1) {
+                continue;
+            }
+            depth = depth_img.at<float>(y, x);
+            if (depth == 0.0) {
+                continue;
+            }
+            point.getVector3fMap() = reproject_point(x, y, depth);
+            point.r = rgb_img.at<cv::Vec3b>(y, x)[0];
+            point.g = rgb_img.at<cv::Vec3b>(y, x)[1];
+            point.b = rgb_img.at<cv::Vec3b>(y, x)[2];
+            cloud.push_back(point);
+        }
+    }
+}
+
+bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, float scale, bool init, cv::Mat* ind) const
 {   
     Matrix3f R = basis.transpose()*other.basis;
     Vector3f t = basis.transpose()*(other.origin - origin);
@@ -222,31 +234,23 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
             return false;
         }
     }
-
-    //MatrixXf copy = other.points;
-    //const size_t n = copy.cols();
-    const size_t n = other.points.cols();
-    //copy = R*copy;
-    //copy += t.replicate(1, n);
-    //copy.array().colwise() += t.array();
-
-    /*copy.row(0) = scaled_fx*copy.row(0).array()/copy.row(2).array() + scaled_cx;
-    copy.row(1) = scaled_fy*copy.row(1).array()/copy.row(2).array() + scaled_cy;*/
-    /*copy.row(0).array() /= 1.0/scaled_fx*copy.row(2).array();
-    copy.row(0).array() += scaled_cx;
-    copy.row(1).array() /= 1.0/scaled_fy*copy.row(2).array();
-    copy.row(1).array() += scaled_cy;*/
     
     depth = cv::Mat::zeros(pheight, pwidth, CV_32FC1);
     rgb = cv::Mat::zeros(pheight, pwidth, CV_8UC3);
+    bool compute_inds = ind != NULL;
+    if (compute_inds) {
+        *ind = cv::Mat::zeros(pheight, pwidth, CV_32SC1);
+    }
     
     int x, y;
     float z, curr_z;
     Vector3f vec;
+    const size_t n = other.points.points.size();
     for (size_t i = 0; i < n; ++i) {
-        //x = int(copy(0, i)) - minx;
-        //y = int(copy(1, i)) - miny;
-        vec = R*other.points.col(i) + t;
+        if (isnan(other.points.points[i].z) || isinf(other.points.points[i].z)) {
+            continue;
+        }
+        vec = R*other.points.points[i].getVector3fMap() + t;
         x = int(scaled_fx*vec(0)/vec(2)+scaled_cx) - minx; // +0.5?
         y = int(scaled_fy*vec(1)/vec(2)+scaled_cy) - miny; // +0.5?
         if (x >= 0 && x < pwidth && y >= 0 && y < pheight) {
@@ -254,9 +258,12 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
             curr_z = depth.at<float>(y, x);
             if (curr_z == 0 || curr_z > z) {
                 depth.at<float>(y, x) = z;
-                rgb.at<cv::Vec3b>(y, x)[0] = other.red[i];
-                rgb.at<cv::Vec3b>(y, x)[1] = other.green[i];
-                rgb.at<cv::Vec3b>(y, x)[2] = other.blue[i];
+                rgb.at<cv::Vec3b>(y, x)[0] = other.points.points[i].r;
+                rgb.at<cv::Vec3b>(y, x)[1] = other.points.points[i].g;
+                rgb.at<cv::Vec3b>(y, x)[2] = other.points.points[i].b;
+                if (compute_inds) {
+                    ind->at<int32_t>(y, x) = i;
+                }
             }
         }
     }
@@ -286,7 +293,5 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
 
 scan::~scan()
 {
-    delete[] red;
-    delete[] green;
-    delete[] blue;
+
 }

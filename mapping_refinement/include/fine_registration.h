@@ -45,7 +45,7 @@ public:
     {
         pyr_scale = 0.5;
         levels = 3;//5;
-        winsize = 20;//200; // 100
+        winsize = 100;//200; // 100
         iterations = 2; // 3
         poly_n = 5;//9;//5;
         poly_sigma = 1.0;//1.3;//3.0;//3.2;
@@ -64,7 +64,7 @@ public:
 #endif
         iteration = 0;
         size_t ox, oy;
-        scales = {4.0};//{8.0, 4.0, 2.0, 1.0};
+        scales = {1.0};//{8.0, 4.0, 2.0, 1.0};
         rgbs1.resize(scales.size());
         rgbs2.resize(scales.size());
         depths1.resize(scales.size());

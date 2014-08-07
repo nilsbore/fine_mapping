@@ -87,6 +87,7 @@ add_library(stitched_map src/stitched_map.cpp include/stitched_map.h)
 add_executable(save_scan src/save_scan.cpp)
 add_executable(test_projection src/test_projection.cpp)
 add_executable(test_cuda src/test_cuda.cpp)
+add_executable(test_structure src/test_structure.cpp)
 add_executable(test_mapping src/test_mapping.cpp)
 add_executable(test_icp_mapping src/test_icp_mapping.cpp)
 add_executable(test_compare_registration src/test_compare_registration.cpp)
@@ -158,6 +159,13 @@ target_link_libraries(test_cuda
   opencv2_all
 )
 
+target_link_libraries(test_structure
+  ${catkin_LIBRARIES}
+  #${OpenCV_LIBS}
+  opencv2_all
+  ${PCL_LIBRARIES}
+)
+
 target_link_libraries(test_mapping
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
@@ -165,6 +173,7 @@ target_link_libraries(test_mapping
   fine_vertex
   fine_edge
   asynch_visualizer
+  stitched_map
   g2o_core
   g2o_types_slam3d
   g2o_solver_csparse

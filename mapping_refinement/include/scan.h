@@ -7,10 +7,7 @@
 
 class scan {
 protected:
-    Eigen::MatrixXf points;
-    uint8_t* red;
-    uint8_t* green;
-    uint8_t* blue;
+    pcl::PointCloud<pcl::PointXYZRGB> points; // maybe subclass instead
     float fx, fy, cx, cy;
     float minz, maxz;
     size_t height, width;
@@ -27,12 +24,13 @@ public:
     Eigen::Vector3f reproject_point(int x, int y, float depth, float scale = 1.0) const;
     void submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_t w, size_t h);
     bool is_behind(const scan& other) const;
-    bool project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, float scale = 1.0, bool init = false) const;
-    bool is_empty() { return points.cols() == 0; }
+    bool project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, float scale = 1.0, bool init = false, cv::Mat* ind = NULL) const;
+    void reproject(pcl::PointCloud<pcl::PointXYZRGB>& cloud, cv::Mat* counter = NULL) const;
+    bool is_empty() { return points.points.empty(); }
     void initialize_from_files(const std::string& pcdname, const std::string& tname);
     scan(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Eigen::Vector3f& origin, const Eigen::Matrix3f& basis, const Eigen::Matrix3f& K);
     scan(const std::string& pcdname, const std::string& tname);
-    scan() { red = green = blue = NULL; }
+    scan() {}
     ~scan();
 };
 #endif // SCAN_H

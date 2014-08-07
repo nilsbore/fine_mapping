@@ -10,6 +10,13 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
 {
     clock_t begin = std::clock();
 
+    // DEBUG
+    Matrix3f R_comp;
+    R_comp.setIdentity();
+    Vector3f t_comp;
+    t_comp.setZero();
+    // DEBUG
+
     Matrix3f R_orig;
     Vector3f t_orig;
     scan1->get_transform(R_orig, t_orig);
@@ -21,6 +28,11 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
         scan1->transform(R, t);
         a = AngleAxisf(R);
         ++counter;
+
+        // DEBUG
+        R_comp = R_comp*R; // add to total rotation
+        t_comp += R_comp*t; // add to total translation
+        // DEBUG
     }
     while (counter < 20 && (t.norm() > 0.003 || fabs(a.angle()) > 0.0005));
     Matrix3f R_final;
@@ -34,11 +46,11 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
     clock_t end = std::clock();
     std::cout << "Took " << double(end - begin) / CLOCKS_PER_SEC << "s" << std::endl;
 
-    R = R_final.transpose()*R2;
-    t = R_final.transpose()*(t2-t_final);
+    //R = R_final.transpose()*R2;
+    //t = R_final.transpose()*(t2-t_final);
 
     // DEBUG
-    /*a = AngleAxisf(R_comp);
+    a = AngleAxisf(R_comp);
     if (t_comp.norm() > 0.1) {
         std::cout << "Incorrect because of translation: " << t_comp.norm() << std::endl;
         R = R_orig.transpose()*R2;
@@ -58,7 +70,7 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
         R = R_final.transpose()*R2;
         t = R_final.transpose()*(t2-t_final);
         return true;
-    }*/
+    }
 }
 
 static void drawOptFlowMap(const cv::Mat& flow, cv::Mat& cflowmap, cv::Mat& invalid, int step, double len, const cv::Scalar& color)

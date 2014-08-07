@@ -13,6 +13,7 @@ class stitched_map
 private:
     std::vector<scan*>& scans;
     void average_scans(scan& scan1, scan& scan2, cv::Mat& counter1, cv::Mat& counter2);
+    void construct_counters(std::vector<cv::Mat>& counters);
 public:
     void visualize();
     stitched_map(std::vector<scan*>& scans) : scans(scans)
