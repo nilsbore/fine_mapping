@@ -81,6 +81,7 @@ add_library(fine_registration src/fine_registration.cpp include/fine_registratio
 add_library(asynch_visualizer src/asynch_visualizer.cpp include/asynch_visualizer.h)
 add_library(fine_edge src/fine_edge.cpp include/fine_edge.h)
 add_library(fine_vertex src/fine_vertex.cpp include/fine_vertex.h)
+add_library(stitched_map src/stitched_map.cpp include/stitched_map.h)
 
 ## Declare a cpp executable
 add_executable(save_scan src/save_scan.cpp)
@@ -135,6 +136,14 @@ target_link_libraries(fine_edge
   g2o_core
   g2o_types_slam3d
 )
+
+target_link_libraries(stitched_map
+  ${catkin_LIBRARIES}
+  scan
+  #${OpenCV_LIBS}
+  opencv2_all
+)
+
 
 target_link_libraries(test_projection
   ${catkin_LIBRARIES}

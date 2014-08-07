@@ -247,8 +247,8 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
         //x = int(copy(0, i)) - minx;
         //y = int(copy(1, i)) - miny;
         vec = R*other.points.col(i) + t;
-        x = int(scaled_fx*vec(0)/vec(2)+scaled_cx) - minx;
-        y = int(scaled_fy*vec(1)/vec(2)+scaled_cy) - miny;
+        x = int(scaled_fx*vec(0)/vec(2)+scaled_cx) - minx; // +0.5?
+        y = int(scaled_fy*vec(1)/vec(2)+scaled_cy) - miny; // +0.5?
         if (x >= 0 && x < pwidth && y >= 0 && y < pheight) {
             z = vec(2);
             curr_z = depth.at<float>(y, x);
