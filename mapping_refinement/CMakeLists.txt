@@ -88,11 +88,11 @@ add_library(fine_mapping src/fine_mapping.cpp include/fine_mapping.h)
 
 ## Declare a cpp executable
 add_executable(save_scan src/save_scan.cpp)
-add_executable(test_projection src/test_projection.cpp)
+add_executable(visualize_registration src/visualize_registration.cpp)
 add_executable(test_cuda src/test_cuda.cpp)
 add_executable(test_mapping src/test_mapping.cpp)
 add_executable(test_icp_mapping src/test_icp_mapping.cpp)
-add_executable(test_compare_registration src/test_compare_registration.cpp)
+add_executable(compare_registration src/compare_registration.cpp)
 add_executable(reproject_scans src/reproject_scans.cpp)
 add_executable(map_from_scan src/map_from_scan.cpp include/simpleXMLparser.h)
 
@@ -135,7 +135,7 @@ target_link_libraries(stitched_map
 )
 
 
-target_link_libraries(test_projection
+target_link_libraries(visualize_registration
   ${catkin_LIBRARIES}
   scan
   fine_registration
@@ -159,7 +159,7 @@ target_link_libraries(test_icp_mapping
   g2o_stuff
 )
 
-target_link_libraries(test_compare_registration
+target_link_libraries(compare_registration
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   fine_registration
