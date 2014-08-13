@@ -1,23 +1,26 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(mapping_refinement)
 
-add_definitions(-std=c++0x -O4 -DNDEBUG)
+add_definitions(-std=c++0x -O4 -DNDEBUG -fPIC)
 #set(CMAKE_CXX_FLAGS "-DCMAKE_BUILD_TYPE=Debug -Wall -fPIC -std=c++0x")
+set(CATKIN_DEVEL_PREFIX "/home/nbore/hydro_ws2/devel")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS std_msgs roscpp sensor_msgs std_msgs pcl_ros tf message_filters cv_bridge)
+find_package(catkin REQUIRED COMPONENTS std_msgs roscpp sensor_msgs std_msgs pcl_ros tf message_filters cv_bridge qt_build)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
-#find_package(OpenCV REQUIRED)
+find_package(OpenCV REQUIRED)
 
 find_package(PCL REQUIRED)
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
+
+rosbuild_prepare_qt4(QtCore QtXml)
 
 include_directories("/home/nbore/Installs/opencv/include")
 link_directories("/home/nbore/Installs/opencv/release/lib")
@@ -79,19 +82,19 @@ link_directories(/opt/ros/hydro/lib/)
 add_library(scan src/scan.cpp include/scan.h)
 add_library(fine_registration src/fine_registration.cpp include/fine_registration.h)
 add_library(asynch_visualizer src/asynch_visualizer.cpp include/asynch_visualizer.h)
-add_library(fine_edge src/fine_edge.cpp include/fine_edge.h)
-add_library(fine_vertex src/fine_vertex.cpp include/fine_vertex.h)
 add_library(stitched_map src/stitched_map.cpp include/stitched_map.h)
+add_library(octave_convenience src/octave_convenience.cpp include/octave_convenience.h)
+add_library(fine_mapping src/fine_mapping.cpp include/fine_mapping.h)
 
 ## Declare a cpp executable
 add_executable(save_scan src/save_scan.cpp)
 add_executable(test_projection src/test_projection.cpp)
 add_executable(test_cuda src/test_cuda.cpp)
-add_executable(test_structure src/test_structure.cpp)
 add_executable(test_mapping src/test_mapping.cpp)
 add_executable(test_icp_mapping src/test_icp_mapping.cpp)
 add_executable(test_compare_registration src/test_compare_registration.cpp)
 add_executable(reproject_scans src/reproject_scans.cpp)
+add_executable(map_from_scan src/map_from_scan.cpp include/simpleXMLparser.h)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -101,20 +104,21 @@ add_dependencies(save_scan mapping_refinement_generate_messages_cpp)
 target_link_libraries(save_scan
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-  #${OpenCV_LIBS}
-  opencv2_all
+  ${OpenCV_LIBS}
+  #opencv2_all
 )
 
 target_link_libraries(scan
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+  octave_convenience
 )
 
 target_link_libraries(fine_registration
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-  #${OpenCV_LIBS}
-  opencv2_all
+  ${OpenCV_LIBS}
+  #opencv2_all
   scan
 )
 
@@ -123,26 +127,11 @@ target_link_libraries(asynch_visualizer
   ${PCL_LIBRARIES}
 )
 
-target_link_libraries(fine_vertex
-  ${catkin_LIBRARIES}
-  scan
-  g2o_core
-  g2o_types_slam3d
-)
-
-target_link_libraries(fine_edge
-  ${catkin_LIBRARIES}
-  fine_registration
-  fine_vertex
-  g2o_core
-  g2o_types_slam3d
-)
-
 target_link_libraries(stitched_map
   ${catkin_LIBRARIES}
   scan
-  #${OpenCV_LIBS}
-  opencv2_all
+  ${OpenCV_LIBS}
+  #opencv2_all
 )
 
 
@@ -155,37 +144,14 @@ target_link_libraries(test_projection
 
 target_link_libraries(test_cuda
   ${catkin_LIBRARIES}
-  #${OpenCV_LIBS}
-  opencv2_all
-)
-
-target_link_libraries(test_structure
-  ${catkin_LIBRARIES}
-  #${OpenCV_LIBS}
-  opencv2_all
-  ${PCL_LIBRARIES}
-)
-
-target_link_libraries(test_mapping
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  fine_registration
-  fine_vertex
-  fine_edge
-  asynch_visualizer
-  stitched_map
-  g2o_core
-  g2o_types_slam3d
-  g2o_solver_csparse
-  g2o_stuff
+  ${OpenCV_LIBS}
+  #opencv2_all
 )
 
 target_link_libraries(test_icp_mapping
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   fine_registration
-  fine_vertex
-  fine_edge
   asynch_visualizer
   g2o_core
   g2o_types_slam3d
@@ -197,8 +163,6 @@ target_link_libraries(test_compare_registration
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   fine_registration
-  fine_vertex
-  fine_edge
   asynch_visualizer
   g2o_core
   g2o_types_slam3d
@@ -212,6 +176,34 @@ target_link_libraries(reproject_scans
   scan
   fine_registration
   asynch_visualizer
+)
+
+target_link_libraries(fine_mapping
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  fine_registration
+  stitched_map
+  scan
+  g2o_core
+  g2o_types_slam3d
+  g2o_solver_csparse
+  g2o_stuff
+)
+
+target_link_libraries(map_from_scan
+  scan
+  fine_mapping
+  stitched_map
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${QT_LIBRARIES}
+)
+
+target_link_libraries(test_mapping
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  scan
+  fine_mapping
 )
 
 #############
