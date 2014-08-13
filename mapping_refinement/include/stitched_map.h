@@ -16,6 +16,7 @@ private:
     void construct_counters(std::vector<cv::Mat>& counters);
 public:
     void visualize();
+    void merge_clouds(pcl::PointCloud<pcl::PointXYZRGB>& cloud);
     stitched_map(std::vector<scan*>& scans) : scans(scans)
     {
 

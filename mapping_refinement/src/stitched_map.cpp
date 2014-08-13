@@ -48,6 +48,25 @@ void stitched_map::visualize()
     viewer->close();
 }
 
+void stitched_map::merge_clouds(pcl::PointCloud<pcl::PointXYZRGB>& cloud)
+{
+    size_t n = scans.size();
+    std::vector<cv::Mat> counters;
+    construct_counters(counters);
+
+    Eigen::Matrix3f R;
+    Eigen::Vector3f t;
+    for (size_t i = 0; i < n; ++i) {
+        pcl::PointCloud<pcl::PointXYZRGB> cloudi;
+        scans[i]->reproject(cloudi, &counters[i]);
+        scans[i]->get_transform(R, t);
+        for (pcl::PointXYZRGB& point : cloudi.points) {
+            point.getVector3fMap() = R*point.getVector3fMap() + t;
+        }
+        cloud.points.insert(cloud.points.end(), cloudi.points.begin(), cloudi.points.end());
+    }
+}
+
 void stitched_map::construct_counters(std::vector<cv::Mat>& counters)
 {
     size_t n = scans.size();

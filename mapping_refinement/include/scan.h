@@ -15,6 +15,10 @@ protected:
     Eigen::Matrix3f basis;
     void initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Eigen::Vector3f& origin, const Eigen::Matrix3f& basis, const Eigen::Matrix3f& K);
     void camera_cone(Eigen::ArrayXXf& confining_points) const;
+    void convex_hull(std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> >& res, const Eigen::Vector2f& c,
+                     const std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> >& p) const;
+    float compute_overlap_area(const std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> >& p) const;
+    int find_next_point(const Eigen::Vector2f& q, const Eigen::Vector2f& c, const std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> >& p, std::vector<int>& used) const;
 public:
     cv::Mat depth_img;
     cv::Mat rgb_img;
@@ -24,6 +28,7 @@ public:
     Eigen::Vector3f reproject_point(int x, int y, float depth, float scale = 1.0) const;
     void submatrices(cv::Mat& depth, cv::Mat& rgb, size_t ox, size_t oy, size_t w, size_t h);
     bool is_behind(const scan& other) const;
+    bool overlaps_with(const scan& other) const;
     bool project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, float scale = 1.0, bool init = false, cv::Mat* ind = NULL) const;
     void reproject(pcl::PointCloud<pcl::PointXYZRGB>& cloud, cv::Mat* counter = NULL) const;
     bool is_empty() { return points.points.empty(); }

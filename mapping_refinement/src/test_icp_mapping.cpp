@@ -183,7 +183,7 @@ int main(int argc, char** argv)
     std::vector<scan*> scans;
     std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
 
-    size_t n = 34;
+    size_t n = 50;
     // set the filenames for the pointclouds and transforms, initialize scan objects
     for (size_t i = 0; i < n; ++i) {
         std::stringstream ss;

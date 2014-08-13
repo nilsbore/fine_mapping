@@ -37,42 +37,12 @@ protected:
                                                     const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>& cloud_tgt_demean,
                                                     const Eigen::Vector3f& centroid_tgt,
                                                     Eigen::Matrix4f& transformation_matrix);
+    void calculate_mean_flow(cv::Mat& flow, const cv::Mat& rgb1, const cv::Mat& rgb2);
+    void calculate_gray_depth_flow(cv::Mat& flow, const cv::Mat& gray1, const cv::Mat& gray2, const cv::Mat& depth1, const cv::Mat& depth2);
 public:
     static bool register_scans(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan* scan1, scan* scan2);
     float error() const { return last_error; }
     void step(Eigen::Matrix3f& R, Eigen::Vector3f& t);
-    fine_registration(scan& scan1, scan& scan2) : scan1(scan1), scan2(scan2)
-    {
-        pyr_scale = 0.5;
-        levels = 3;//5;
-        winsize = 100;//200; // 100
-        iterations = 2; // 3
-        poly_n = 5;//9;//5;
-        poly_sigma = 1.0;//1.3;//3.0;//3.2;
-        /*levels = 5;
-        pyr_scale = 0.5;
-        winsize = 13;
-        iterations = 10;
-        poly_n = 5;
-        poly_sigma = 1.1;*/
-#ifdef WITH_GPU
-        cv::Mat gray1, gray2;
-        cvtColor(scan1.rgb_img, gray1, CV_RGB2GRAY);
-        cvtColor(scan2.rgb_img, gray2, CV_RGB2GRAY);
-        gpugray1.upload(gray1);
-        gpugray2.upload(gray2);
-#endif
-        iteration = 0;
-        size_t ox, oy;
-        scales = {1.0};//{8.0, 4.0, 2.0, 1.0};
-        rgbs1.resize(scales.size());
-        rgbs2.resize(scales.size());
-        depths1.resize(scales.size());
-        depths2.resize(scales.size());
-        for (size_t i = 0; i < scales.size(); ++i) {
-            scan1.project(depths1[i], rgbs1[i], ox, oy, scan1, scales[i], true);
-            scan2.project(depths2[i], rgbs2[i], ox, oy, scan2, scales[i], true);
-        }
-    }
+    fine_registration(scan& scan1, scan& scan2);
 };
 #endif // FINE_REGISTRATION_H

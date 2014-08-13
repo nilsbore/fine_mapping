@@ -7,6 +7,7 @@
 #include <pcl/io/pcd_io.h>
 #include <ros/ros.h>
 #include <opencv2/highgui/highgui.hpp>
+#include "octave_convenience.h"
 
 using namespace Eigen;
 
@@ -289,6 +290,200 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
     cv::imshow("Rgb2", rgb_img);
     cv::waitKey(0);*/
     return true;
+}
+
+int scan::find_next_point(const Vector2f& q, const Vector2f& c, const std::vector<Vector2f, aligned_allocator<Vector2f> >& p, std::vector<int>& used) const
+{
+    Vector2f p0;
+    Vector2f p1;
+    Vector2f v;
+    Vector2f o;
+    bool found;
+    for (size_t j = 0; j < p.size(); ++j) {
+        if (used[j]) {
+            continue;
+        }
+        p0 = q;
+        p1 = p[j];
+        if (p0(0) == p1(0) && p0(1) == p1(1)) {
+            continue;
+        }
+        v = p1 - p0;
+        o = Vector2f(-v(1), v(0));
+        if (o.dot(c - p0) < 0) {
+            continue;
+        }
+        found = true;
+        for (size_t k = 0; k < p.size(); ++k) {
+            if (k == j || (p[k](0) == q(0) && p[k](1) == q(1))) {
+                continue;
+            }
+            if (o.dot(p[k] - p0) < 0) {
+                found = false;
+                break;
+            }
+        }
+        if (found) {
+            used[j] = 1;
+            return j;
+        }
+    }
+    return -1;
+}
+
+void scan::convex_hull(std::vector<Vector2f, aligned_allocator<Vector2f> >& res, const Vector2f& c, const std::vector<Vector2f, aligned_allocator<Vector2f> >& p) const
+{
+    std::vector<int> used;
+    used.resize(p.size(), 0);
+
+    int first_ind;
+    int previous_ind;
+    for (size_t i = 0; i < p.size(); ++i) {
+        int ind = find_next_point(p[i], c, p, used);
+        if (ind != -1) {
+            used[i] = 1;
+            used[ind] = 1;
+            first_ind = i;
+            previous_ind = ind;
+            break;
+        }
+        used[i] = 1;
+    }
+    res.push_back(p[first_ind]);
+    while (previous_ind != first_ind) {
+        res.push_back(p[previous_ind]);
+        int ind = find_next_point(p[previous_ind], c, p, used);
+        previous_ind = ind;
+        used[first_ind] = 0;
+    }
+}
+
+float scan::compute_overlap_area(const std::vector<Vector2f, aligned_allocator<Vector2f> >& p) const
+{
+    Vector2f p0 = p[0];
+    Matrix2f D;
+    float area_triangle;
+    float area = 0.0;
+    for (size_t i = 1; i < p.size()-1; ++i) {
+        Vector2f p1 = p[i];
+        Vector2f p2 = p[i+1];
+        D.col(0) = p1 - p0;
+        D.col(1) = p2 - p0;
+        area_triangle = 0.5*D.determinant();
+        area += fabs(area_triangle);
+        /*float a = (p1-p0).norm();
+        float b = (p2-p0).norm();
+        float c = (p2-p1).norm();
+        float s = 0.5*(a + b + c);
+        area += sqrt(s*(s-a)*(s-b)*(s-c));*/
+    }
+    return area;
+}
+
+/*bool scan::overlaps_with(const scan& other) const
+{
+    Matrix3f R = basis.transpose()*other.basis;
+    Vector3f t = basis.transpose()*(other.origin - origin);
+
+    if (R(2, 2) < 0.0) {
+        return false;
+    }
+
+    ArrayXXf confining_points;
+    other.camera_cone(confining_points);
+    confining_points = R*confining_points.matrix();
+    confining_points.matrix() += t.replicate(1, 8);
+
+    Matrix<float, 2, 8> m;
+    m.row(0) = fx*confining_points.row(0)/confining_points.row(2) + cx;
+    m.row(1) = fy*confining_points.row(1)/confining_points.row(2) + cy;
+
+    std::vector<Vector2f, aligned_allocator<Vector2f> > p;
+    p.resize(8);
+    for (size_t i = 0; i < 8; ++i) {
+        m(0, i) = std::max(0.0f, m(0, i));
+        m(0, i) = std::min(float(width-1), m(0, i));
+        m(1, i) = std::max(0.0f, m(1, i));
+        m(1, i) = std::min(float(height-1), m(1, i));
+        p[i] = m.col(i);
+    }
+
+    Vector2f c = m.rowwise().mean();
+    std::vector<Vector2f, aligned_allocator<Vector2f> > hull;
+
+    std::vector<double> xi;
+    std::vector<double> yi;
+    for (double i : {0.0, 480.0}) {
+        for (double j : {0.0, 640.0}) {
+            xi.push_back(j);
+            yi.push_back(i);
+        }
+    }
+
+    convex_hull(hull, c, p);
+    float overlap_area = compute_overlap_area(hull);
+
+    std::vector<double> x;
+    std::vector<double> y;
+    for (size_t i = 0; i < hull.size(); ++i) {
+        x.push_back(hull[i](0));
+        y.push_back(hull[i](1));
+    }
+
+    std::cout << "Overlap area: " << overlap_area << std::endl;
+    std::cout << "Hull points: " << hull.size() << std::endl;
+    for (size_t i = 0; i < hull.size(); ++i) {
+        std::cout << hull[i].transpose() << ", ";
+    }
+    std::cout << std::endl;
+
+    octave_convenience o;
+    o << "plot(";
+    o.append_vector(x);
+    o << ", ";
+    o.append_vector(y);
+    o << ", 'b'); axis equal; pause";
+    //o << " hold on; plot(";
+    //o.append_vector(xi);
+    //o << ", ";
+    //o.append_vector(yi);
+    //o << ", 'r'); axis equal; pause";
+    o.eval();
+
+    if (overlap_area > float(width*height)/2.0) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}*/
+
+bool scan::overlaps_with(const scan& other) const
+{
+    Matrix3f R = basis.transpose()*other.basis;
+    Vector3f t = basis.transpose()*(other.origin - origin);
+
+    if (R(2, 2) < 0.0) {
+        return false;
+    }
+
+    int x, y;
+    int ok_counter = 0;
+    int counter = 0;
+    Vector3f vec;
+    for (size_t i = 0; i < other.points.size(); i += 30) {
+        if (isnan(other.points.points[i].z) || isinf(other.points.points[i].z)) {
+            continue;
+        }
+        vec = R*other.points.points[i].getVector3fMap() + t;
+        x = int(fx*vec(0)/vec(2)+cx);
+        y = int(fy*vec(1)/vec(2)+cy);
+        if (x > 0 && x < width && y > 0 && y < height) {
+            ++ok_counter;
+        }
+        ++counter;
+    }
+    return float(ok_counter)/float(counter) > 0.5;
 }
 
 scan::~scan()

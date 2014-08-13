@@ -6,6 +6,40 @@
 
 using namespace Eigen;
 
+fine_registration::fine_registration(scan& scan1, scan& scan2) : scan1(scan1), scan2(scan2)
+{
+    pyr_scale = 0.5;
+    levels = 2;//5;
+    winsize = 100;//200; // 100
+    iterations = 2; // 3
+    poly_n = 5;//9;//5;
+    poly_sigma = 1.1;//1.3;//3.0;//3.2;
+    /*levels = 5;
+    pyr_scale = 0.5;
+    winsize = 13;
+    iterations = 10;
+    poly_n = 5;
+    poly_sigma = 1.1;*/
+#ifdef WITH_GPU
+    cv::Mat gray1, gray2;
+    cvtColor(scan1.rgb_img, gray1, CV_RGB2GRAY);
+    cvtColor(scan2.rgb_img, gray2, CV_RGB2GRAY);
+    gpugray1.upload(gray1);
+    gpugray2.upload(gray2);
+#endif
+    iteration = 0;
+    size_t ox, oy;
+    scales = {1.0};//{8.0, 4.0, 2.0, 1.0};
+    rgbs1.resize(scales.size());
+    rgbs2.resize(scales.size());
+    depths1.resize(scales.size());
+    depths2.resize(scales.size());
+    for (size_t i = 0; i < scales.size(); ++i) {
+        scan1.project(depths1[i], rgbs1[i], ox, oy, scan1, scales[i], true);
+        scan2.project(depths2[i], rgbs2[i], ox, oy, scan2, scales[i], true);
+    }
+}
+
 bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, scan* scan2)
 {
     clock_t begin = std::clock();
@@ -51,7 +85,7 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
 
     // DEBUG
     a = AngleAxisf(R_comp);
-    if (t_comp.norm() > 0.1) {
+    if (t_comp.norm() > 0.2) {//0.1) {
         std::cout << "Incorrect because of translation: " << t_comp.norm() << std::endl;
         R = R_orig.transpose()*R2;
         t = R_orig.transpose()*(t2-t_orig);
@@ -121,6 +155,7 @@ void fine_registration::get_transformation_from_correlation(
     transformation_matrix.block(0, 3, 3, 1) = centroid_tgt.head(3) - Rc;
 }
 
+// calculate flow from 2 to 1 instead, have more information in 1
 void fine_registration::compute_transform(Matrix3f& R, Vector3f& t, const cv::Mat& depth2, const cv::Mat& depth1,
                                           const cv::Mat& flow, const cv::Mat& invalid, float scale) const
 {
@@ -139,7 +174,7 @@ void fine_registration::compute_transform(Matrix3f& R, Vector3f& t, const cv::Ma
             z1 = depth1.at<float>(y, x);
             p1 = scan1.reproject_point(x, y, z1, scale);
             z2 = depth2.at<float>(y+fxy.y, x+fxy.x);
-            if (z2 == 0 || fabs(z1-z2) > 0.1) {
+            if (z2 == 0 || fabs(z1-z2) > 0.4) {
                 continue;
             }
             p2 = scan1.reproject_point(x+fxy.x, y+fxy.y, z2, scale);
@@ -180,6 +215,34 @@ float fine_registration::compute_error(const cv::Mat& depth2, const cv::Mat& dep
     return rtn/counter;
 }
 
+void fine_registration::calculate_mean_flow(cv::Mat& flow, const cv::Mat& rgb1, const cv::Mat& rgb2)
+{
+    std::vector<cv::Mat> channels1(3);
+    // split img:
+    cv::split(rgb1, channels1);
+
+    std::vector<cv::Mat> channels2(3);
+    // split img:
+    cv::split(rgb2, channels2);
+
+    std::vector<cv::Mat> flows(3);
+    for (size_t i = 0; i < 3; ++i) {
+        cv::calcOpticalFlowFarneback(channels1[i], channels2[i], flows[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+    }
+
+    flow = (flows[0] + flows[1] + flows[2]) / 3.0;
+}
+
+void fine_registration::calculate_gray_depth_flow(cv::Mat& flow, const cv::Mat& gray1, const cv::Mat& gray2, const cv::Mat& depth1, const cv::Mat& depth2)
+{
+    cv::Mat gray_flow, depth_flow;
+
+    cv::calcOpticalFlowFarneback(gray1, gray2, gray_flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+    cv::calcOpticalFlowFarneback(depth1, depth2, depth_flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+
+    flow = (gray_flow + depth_flow) / 2.0;
+}
+
 void fine_registration::step(Matrix3f& R, Vector3f& t)
 {
     R.setIdentity();
@@ -205,19 +268,12 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
         depth1 = depths2[iteration](roi);
         rgb1 = rgbs2[iteration](roi);
     }
-
-    if (ox < 0 || ox >= depth2.size().width || oy < 0 || oy >= depth2.size().height) {
-        std::cout << "Scans not overlapping!" << std::endl;
-        std::cout << "ox: " << ox << std::endl;
-        std::cout << "oy: " << oy << std::endl;
-    }
     
     cv::Mat binary;
     cv::bitwise_or(depth1 == 0, depth2 == 0, binary);
-    
     const bool use_mask = true;
     if (use_mask) {
-        int morph_size = 4;
+        int morph_size = 2;
 
         int morph_type = cv::MORPH_ELLIPSE;
         cv::Mat element = cv::getStructuringElement(morph_type,
@@ -275,6 +331,8 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
 #else
     cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
     //cv::calcOpticalFlowFarneback(channels1[2], channels2[2], flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+    //calculate_mean_flow(flow, rgb1, rgb2);
+    //calculate_gray_depth_flow(flow, rgb1, rgb2, depth1, depth2);
 #endif
 
     compute_transform(R, t, depth2, depth1, flow, binary, scale);

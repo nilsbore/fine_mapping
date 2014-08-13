@@ -2,8 +2,6 @@
 #include "scan.h"
 #include "fine_registration.h"
 #include "asynch_visualizer.h"
-#include "fine_edge.h"
-#include "fine_vertex.h"
 
 #include <Eigen/Dense>
 #include <pcl/visualization/pcl_visualizer.h>
@@ -21,7 +19,6 @@
 #include "g2o/solvers/pcg/linear_solver_pcg.h"
 #include "g2o/types/slam3d/edge_se3.h"
 #include "g2o/types/slam3d/vertex_se3.h"
-//#include "g2o/core/hyper_graph.h"
 
 #include <string>
 #include <boost/algorithm/string.hpp>
