@@ -13,7 +13,7 @@ int main(int argc, char** argv)
         SimpleXMLParser<pcl::PointXYZRGB> parser;
         SimpleXMLParser<pcl::PointXYZRGB>::RoomData room_data;
 
-        room_data = parser.loadRoomFromXML("SOME_PATH/room_2/room.xml");
+        room_data = parser.loadRoomFromXML("/home/nbore/.semanticMap/20140813/patrol_run_1/room_0/room.xml");
 
         std::cout << "Complete cloud size: " << room_data.completeRoomCloud->points.size() << std::endl;
 

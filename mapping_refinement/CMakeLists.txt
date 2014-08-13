@@ -8,7 +8,7 @@ set(CATKIN_DEVEL_PREFIX "/home/nbore/hydro_ws2/devel")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS std_msgs roscpp sensor_msgs std_msgs pcl_ros tf message_filters cv_bridge qt_build)
+find_package(catkin REQUIRED COMPONENTS std_msgs roscpp sensor_msgs std_msgs pcl_ros tf message_filters cv_bridge qt_build metaroom_xml_parser)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -66,7 +66,7 @@ catkin_package(
    INCLUDE_DIRS include
    LIBRARIES scan fine_registration asynch_visualizer stitched_map octave_convenience fine_mapping
 #  CATKIN_DEPENDS other_catkin_pkg
-#  DEPENDS system_lib
+#   DEPENDS
 )
 
 ###########
@@ -94,7 +94,7 @@ add_executable(test_mapping src/test_mapping.cpp)
 add_executable(test_icp_mapping src/test_icp_mapping.cpp)
 add_executable(compare_registration src/compare_registration.cpp)
 add_executable(reproject_scans src/reproject_scans.cpp)
-add_executable(map_from_scan src/map_from_scan.cpp include/simpleXMLparser.h)
+add_executable(map_from_scan src/map_from_scan.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -196,7 +196,6 @@ target_link_libraries(map_from_scan
   stitched_map
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-  ${QT_LIBRARIES}
 )
 
 target_link_libraries(test_mapping
