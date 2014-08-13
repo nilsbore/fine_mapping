@@ -22,8 +22,8 @@ add_definitions(${PCL_DEFINITIONS})
 
 rosbuild_prepare_qt4(QtCore QtXml)
 
-include_directories("/home/nbore/Installs/opencv/include")
-link_directories("/home/nbore/Installs/opencv/release/lib")
+#include_directories("/home/nbore/Installs/opencv/include")
+#link_directories("/home/nbore/Installs/opencv/release/lib")
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
