@@ -7,7 +7,6 @@
 
 class scan {
 protected:
-    pcl::PointCloud<pcl::PointXYZRGB> points; // maybe subclass instead
     float fx, fy, cx, cy;
     float minz, maxz;
     size_t height, width;
@@ -19,7 +18,9 @@ protected:
                      const std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> >& p) const;
     float compute_overlap_area(const std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> >& p) const;
     int find_next_point(const Eigen::Vector2f& q, const Eigen::Vector2f& c, const std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> >& p, std::vector<int>& used) const;
+    void project_onto_self(cv::Mat& depth, cv::Mat& rgb) const;
 public:
+    pcl::PointCloud<pcl::PointXYZRGB> points; // maybe subclass instead
     cv::Mat depth_img;
     cv::Mat rgb_img;
     void set_transform(const Eigen::Matrix3f& R, const Eigen::Vector3f& t);

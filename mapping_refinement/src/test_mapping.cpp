@@ -26,7 +26,7 @@ int main(int argc, char** argv)
     f.build_graph();
     f.optimize_graph();
     stitched_map map(scans);
-    map.visualize();
+    map.visualize(true);
 
     return 0;
 }

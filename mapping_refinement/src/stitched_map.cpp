@@ -5,11 +5,13 @@
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
 
-void stitched_map::visualize()
+void stitched_map::visualize(bool double_count)
 {
     size_t n = scans.size();
     std::vector<cv::Mat> counters;
-    construct_counters(counters);
+    if (!double_count) {
+        construct_counters(counters);
+    }
 
     std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
     clouds.resize(n);
@@ -17,7 +19,12 @@ void stitched_map::visualize()
     Eigen::Vector3f t;
     for (size_t i = 0; i < n; ++i) {
         clouds[i] = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
-        scans[i]->reproject(*clouds[i], &counters[i]);
+        if (double_count) {
+            scans[i]->reproject(*clouds[i]);
+        }
+        else {
+            scans[i]->reproject(*clouds[i], &counters[i]);
+        }
         scans[i]->get_transform(R, t);
         for (pcl::PointXYZRGB& point : clouds[i]->points) {
             point.getVector3fMap() = R*point.getVector3fMap() + t;

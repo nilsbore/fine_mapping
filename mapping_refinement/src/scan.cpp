@@ -82,11 +82,11 @@ void scan::initialize(const pcl::PointCloud<pcl::PointXYZRGB>& cloud, const Vect
     origin = eorigin;
     basis = ebasis;
     pcl::copyPointCloud(cloud, points);
-    minz = INFINITY;
+    minz = 1000.0;
     maxz = 0.0;
     bool empty = true;
     for (const pcl::PointXYZRGB& point : points.points) {
-        if (isnan(point.z ) || isinf(point.z )) {
+        if (isnan(point.z) || isinf(point.z)) {
             continue;
         }
         empty = false;
@@ -192,6 +192,25 @@ void scan::reproject(pcl::PointCloud<pcl::PointXYZRGB>& cloud, cv::Mat* counter)
     }
 }
 
+void scan::project_onto_self(cv::Mat& depth, cv::Mat& rgb) const
+{
+    depth = cv::Mat::zeros(height, width, CV_32FC1);
+    rgb = cv::Mat::zeros(height, width, CV_8UC3);
+
+    pcl::PointXYZRGB point;
+    for (size_t y = 0; y < height; ++y) {
+        for (size_t x = 0; x < width; ++x) {
+            point = points.points[y*width + x];
+            rgb.at<cv::Vec3b>(y, x)[0] = point.r;
+            rgb.at<cv::Vec3b>(y, x)[1] = point.g;
+            rgb.at<cv::Vec3b>(y, x)[2] = point.b;
+            if (!isnan(point.z) && !isinf(point.z)) {
+                depth.at<float>(y, x) = point.z;
+            }
+        }
+    }
+}
+
 bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const scan& other, float scale, bool init, cv::Mat* ind) const
 {   
     Matrix3f R = basis.transpose()*other.basis;
@@ -203,11 +222,17 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
     float scaled_cy = cy / scale;
     
     int pwidth, pheight;
-    int minx, miny;
-    if (init) {
+    int minx, miny, maxx, maxy;
+    if (init || &other == this) {
         pwidth = width / int(scale);
         pheight = height / int(scale);
         minx = miny = 0;
+        maxx = width;
+        maxy = height;
+        if (scale == 1.0 && ind == NULL) {
+            project_onto_self(depth, rgb);
+            return true;
+        }
     }
     else {
         ArrayXXf confining_points;
@@ -218,9 +243,9 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
         confining_points.row(0) = scaled_fx*confining_points.row(0)/confining_points.row(2) + scaled_cx;
         confining_points.row(1) = scaled_fy*confining_points.row(1)/confining_points.row(2) + scaled_cy;
         minx = int(confining_points.row(0).minCoeff());
-        int maxx = int(confining_points.row(0).maxCoeff());
+        maxx = int(confining_points.row(0).maxCoeff());
         miny = int(confining_points.row(1).minCoeff());
-        int maxy = int(confining_points.row(1).maxCoeff());
+        maxy = int(confining_points.row(1).maxCoeff());
         minx = std::max(minx, 0);
         miny = std::max(miny, 0);
         maxx = std::min(maxx, int(width) / int(scale)); // + 0.5?
@@ -231,13 +256,21 @@ bool scan::project(cv::Mat& depth, cv::Mat& rgb, size_t& ox, size_t& oy, const s
 
         //std::cout << "Cropped width: " << pwidth << ", height: " << pheight << std::endl;
         if (maxx <= minx || maxy <= miny) {
+            std::cout << "minx: " << minx << ", " << "maxx: " << maxx << ", " << "miny: " << miny << ", " << "maxy: " << maxy << std::endl;
+            std::cout << "Confining points: " << std::endl;
+            std::cout << confining_points << std::endl;
+            std::cout << "R: " << std::endl;
+            std::cout << R << std::endl;
+            std::cout << "t: " << std::endl;
+            std::cout << t << std::endl;
+            std::cout << "minz:" << minz << ", " << "maxz:" << maxz << std::endl;
             std::cout << "Scans are not overlapping!" << std::endl;
             return false;
         }
     }
     
     depth = cv::Mat::zeros(pheight, pwidth, CV_32FC1);
-    rgb = cv::Mat::zeros(pheight, pwidth, CV_8UC3);
+    rgb = 125*cv::Mat::ones(pheight, pwidth, CV_8UC3);
     bool compute_inds = ind != NULL;
     if (compute_inds) {
         *ind = cv::Mat::zeros(pheight, pwidth, CV_32SC1);

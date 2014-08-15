@@ -8,11 +8,17 @@ using namespace Eigen;
 
 fine_registration::fine_registration(scan& scan1, scan& scan2) : scan1(scan1), scan2(scan2)
 {
-    pyr_scale = 0.5;
+    /*pyr_scale = 0.5;
     levels = 2;//5;
     winsize = 100;//200; // 100
     iterations = 2; // 3
     poly_n = 5;//9;//5;
+    poly_sigma = 1.1;//1.3;//3.0;//3.2;*/
+    pyr_scale = 0.5;
+    levels = 2;//5;
+    winsize = 40;//200; // 100
+    iterations = 2; // 3
+    poly_n = 7;//9;//5;
     poly_sigma = 1.1;//1.3;//3.0;//3.2;
     /*levels = 5;
     pyr_scale = 0.5;
@@ -85,14 +91,15 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
 
     // DEBUG
     a = AngleAxisf(R_comp);
+    float angle = fmod(fabs(a.angle()), 2*M_PI);
     if (t_comp.norm() > 0.2) {//0.1) {
         std::cout << "Incorrect because of translation: " << t_comp.norm() << std::endl;
         R = R_orig.transpose()*R2;
         t = R_orig.transpose()*(t2-t_orig);
         return false;
     }
-    else if (fabs(a.angle()) > 0.06) {
-        std::cout << "Incorrect because of rotation: " << fabs(a.angle()) << std::endl;
+    else if (angle > 0.04) {
+        std::cout << "Incorrect because of rotation: " << angle << std::endl;
         R = R_orig.transpose()*R2;
         t = R_orig.transpose()*(t2-t_orig);
         return false;
@@ -100,10 +107,10 @@ bool fine_registration::register_scans(Matrix3f& R, Vector3f& t, scan* scan1, sc
     else {
         std::cout << "Correct" << std::endl;
         std::cout << "Translation: " << t.norm() << std::endl;
-        std::cout << "Rotation: " << fabs(a.angle()) << std::endl;
+        std::cout << "Rotation: " << angle << std::endl;
         R = R_final.transpose()*R2;
         t = R_final.transpose()*(t2-t_final);
-        return true;
+        return counter < 20;
     }
 }
 
@@ -269,11 +276,12 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
         rgb1 = rgbs2[iteration](roi);
     }
     
+    //cv::Mat binary = depth2 == 0;
     cv::Mat binary;
     cv::bitwise_or(depth1 == 0, depth2 == 0, binary);
     const bool use_mask = true;
     if (use_mask) {
-        int morph_size = 2;
+        int morph_size = 10;
 
         int morph_type = cv::MORPH_ELLIPSE;
         cv::Mat element = cv::getStructuringElement(morph_type,
@@ -337,8 +345,8 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
 
     compute_transform(R, t, depth2, depth1, flow, binary, scale);
 
-    Matrix3f Rt = R.transpose();
     if (!behind) {
+        Matrix3f Rt = R.transpose();
         t = -Rt*t;
         R = Rt;
     }

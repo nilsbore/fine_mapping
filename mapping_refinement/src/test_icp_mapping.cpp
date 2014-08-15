@@ -85,7 +85,7 @@ bool register_clouds_icp(Eigen::Matrix3f& R, Eigen::Vector3f& t,
     }
     pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp; // don't really need rgb
     // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
-    icp.setMaxCorrespondenceDistance(0.03);
+    icp.setMaxCorrespondenceDistance(0.01);
     // Set the maximum number of iterations (criterion 1)
     icp.setMaximumIterations(50);
     // Set the transformation epsilon (criterion 2)
@@ -158,11 +158,11 @@ void compute_initial_transformation(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan
     Rd = R1.transpose()*R2;
     td = R1.transpose()*(t2-t1);
     Eigen::AngleAxisf a(Rd.transpose()*R);
-    if (a.angle() < 0.06 && (t - td).norm() < 0.1) {
-        std::cout << "Correct, angle: " << a.angle() << ", translation: " << (t - td).norm() << std::endl;
+    if (fabs(a.angle()) < 0.06 && (t - td).norm() < 0.1) {
+        std::cout << "Correct, angle: " << fabs(a.angle()) << ", translation: " << (t - td).norm() << std::endl;
         return;
     }
-    std::cout << "Incorrect, angle: " << a.angle() << ", translation: " << (t - td).norm() << std::endl;
+    std::cout << "Incorrect, angle: " << fabs(a.angle()) << ", translation: " << (t - td).norm() << std::endl;
 }
 
 int main(int argc, char** argv)
@@ -203,7 +203,7 @@ int main(int argc, char** argv)
         pcl::removeNaNFromPointCloud(*input_cloud, *finite_cloud, inds);
         pcl::VoxelGrid<pcl::PointXYZRGB> sor;
         sor.setInputCloud(finite_cloud);
-        sor.setLeafSize(0.01f, 0.01f, 0.01f);
+        sor.setLeafSize(0.02f, 0.02f, 0.02f);
         sor.filter(*clouds.back());
 
     }
@@ -275,6 +275,7 @@ int main(int argc, char** argv)
     // bad information
     Eigen::Matrix<double, 6, 6> bad_info;
     bad_info.setIdentity();
+    bad_info.bottomRightCorner<3, 3>() *= 100.0;
     bad_info /= 10.0;
 
     // second add the odometry constraints
@@ -289,7 +290,7 @@ int main(int argc, char** argv)
             odometry->setInformation(good_info);
         }
         else {
-            odometry->setInformation(good_info); //bad_info
+            odometry->setInformation(bad_info); //bad_info
         }
         optimizer.addEdge(odometry);
     }

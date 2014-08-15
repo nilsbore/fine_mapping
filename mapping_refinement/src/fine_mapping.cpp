@@ -23,11 +23,12 @@ void fine_mapping::compute_initial_transformation(Eigen::Matrix3f& R, Eigen::Vec
     Rd = R1.transpose()*R2;
     td = R1.transpose()*(t2-t1);
     Eigen::AngleAxisf a(Rd.transpose()*R);
-    if (a.angle() < 0.06 && (t - td).norm() < 0.1) {
-        std::cout << "Correct, angle: " << a.angle() << ", translation: " << (t - td).norm() << std::endl;
+    float angle = fmod(fabs(a.angle()), 2*M_PI);
+    if (angle < 0.06 && (t - td).norm() < 0.1) {
+        std::cout << "Correct, angle: " << angle << ", translation: " << (t - td).norm() << std::endl;
         return;
     }
-    std::cout << "Incorrect, angle: " << a.angle() << ", translation: " << (t - td).norm() << std::endl;
+    std::cout << "Incorrect, angle: " << angle << ", translation: " << (t - td).norm() << std::endl;
 }
 
 void fine_mapping::build_graph()
@@ -89,8 +90,24 @@ void fine_mapping::build_graph()
         optimizer.addVertex(robot);
         vertices.push_back(robot);
     }
+    // fix the origin
     vertices[0]->setFixed(true);
     vertices[n-1]->setFixed(true);
+
+    // fix the opposite side of the scan
+    /*float maxprod = 0.0;
+    size_t maxi;
+    scans[0]->get_transform(R, t);
+    Eigen::Vector3f p0 = R.col(2);
+    for (size_t i = 0; i < n; ++i) {
+        scans[i]->get_transform(R, t);
+        float prod = p0.dot(R.col(2));
+        if (prod < maxprod) {
+            maxprod = prod;
+            maxi = i;
+        }
+    }
+    vertices[maxi]->setFixed(true);*/
 
     // good information
     Eigen::Matrix<double, 6, 6> good_info;
@@ -100,6 +117,7 @@ void fine_mapping::build_graph()
     // bad information
     Eigen::Matrix<double, 6, 6> bad_info;
     bad_info.setIdentity();
+    bad_info.bottomRightCorner<3, 3>() *= 100.0;
     bad_info /= 10.0;
 
     // second add the odometry constraints
@@ -113,7 +131,7 @@ void fine_mapping::build_graph()
             odometry->setInformation(good_info);
         }
         else {
-            odometry->setInformation(good_info);//bad_info
+            odometry->setInformation(bad_info);//bad_info
         }
         optimizer.addEdge(odometry);
     }
