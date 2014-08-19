@@ -250,6 +250,27 @@ void fine_registration::calculate_gray_depth_flow(cv::Mat& flow, const cv::Mat& 
     flow = (gray_flow + depth_flow) / 2.0;
 }
 
+void fine_registration::calculate_dual_tvl1_flow(cv::Mat& flow, const cv::Mat& gray1, const cv::Mat& gray2)
+{
+    cv::Ptr<cv::DenseOpticalFlow> tvl1 = cv::createOptFlow_DualTVL1();
+    // Time step of the numerical scheme
+    tvl1->set("tau", 0.25);
+    // Weight parameter for the data term, attachment parameter
+    tvl1->set("lambda", 0.15);
+    // Weight parameter for (u - v)^2, tightness parameter
+    tvl1->set("theta", 0.001);
+    // Number of scales used to create the pyramid of images
+    tvl1->set("nscales", 5);
+    // Number of warpings per scale
+    tvl1->set("warps", 5);
+    // Stopping criterion threshold used in the numerical scheme, which is a trade-off between precision and running time
+    tvl1->set("epsilon", 0.01);
+    // Stopping criterion iterations number used in the numerical scheme
+    tvl1->set("iterations", 300);
+    tvl1->set("useInitialFlow", false);
+    tvl1->calc(gray1, gray2, flow);
+}
+
 void fine_registration::step(Matrix3f& R, Vector3f& t)
 {
     R.setIdentity();
@@ -338,6 +359,7 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::merge(flowar, flow);
 #else
     cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+    //calculate_dual_tvl1_flow(flow, gray1, gray2);
     //cv::calcOpticalFlowFarneback(channels1[2], channels2[2], flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
     //calculate_mean_flow(flow, rgb1, rgb2);
     //calculate_gray_depth_flow(flow, rgb1, rgb2, depth1, depth2);
