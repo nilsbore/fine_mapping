@@ -250,6 +250,34 @@ void fine_registration::calculate_gray_depth_flow(cv::Mat& flow, const cv::Mat& 
     flow = (gray_flow + depth_flow) / 2.0;
 }
 
+void fine_registration::calculate_flow_both_directions(cv::Mat& flow12, cv::Mat& binary, const cv::Mat& gray1, const cv::Mat& gray2)
+{
+    cv::Mat flow21;
+
+    cv::calcOpticalFlowFarneback(gray1, gray2, flow12, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+    cv::calcOpticalFlowFarneback(gray2, gray1, flow21, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+
+    for (int y = 0; y < flow12.rows; ++y) {
+        for (int x = 0; x < flow21.cols; ++x) {
+            if (binary.at<bool>(y, x)) {
+                continue;
+            }
+            cv::Point2f& f12xy = flow12.at<cv::Point2f>(y, x);
+            cv::Point2f& f21xy = flow21.at<cv::Point2f>(y+f12xy.y, x+f12xy.x);
+            if (binary.at<bool>(y+f12xy.y, x+f12xy.x)) {
+                binary.at<bool>(y, x) = true;
+                continue;
+            }
+            if (acos(f12xy.dot(-f21xy)/cv::norm(f12xy)/cv::norm(f21xy)) > 0.5*M_PI) {
+                binary.at<bool>(y, x) = true;
+            }
+            else {
+                //f12xy = 0.5*(f12xy + f21xy);
+            }
+        }
+    }
+}
+
 void fine_registration::calculate_dual_tvl1_flow(cv::Mat& flow, const cv::Mat& gray1, const cv::Mat& gray2)
 {
     cv::Ptr<cv::DenseOpticalFlow> tvl1 = cv::createOptFlow_DualTVL1();
@@ -359,6 +387,7 @@ void fine_registration::step(Matrix3f& R, Vector3f& t)
     cv::merge(flowar, flow);
 #else
     cv::calcOpticalFlowFarneback(gray1, gray2, flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+    //calculate_flow_both_directions(flow, binary, gray1, gray2);
     //calculate_dual_tvl1_flow(flow, gray1, gray2);
     //cv::calcOpticalFlowFarneback(channels1[2], channels2[2], flow, pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
     //calculate_mean_flow(flow, rgb1, rgb2);

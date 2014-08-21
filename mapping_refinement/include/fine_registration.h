@@ -40,6 +40,7 @@ protected:
     void calculate_mean_flow(cv::Mat& flow, const cv::Mat& rgb1, const cv::Mat& rgb2);
     void calculate_gray_depth_flow(cv::Mat& flow, const cv::Mat& gray1, const cv::Mat& gray2, const cv::Mat& depth1, const cv::Mat& depth2);
     void calculate_dual_tvl1_flow(cv::Mat& flow, const cv::Mat& gray1, const cv::Mat& gray2);
+    void calculate_flow_both_directions(cv::Mat& flow12, cv::Mat& binary, const cv::Mat& gray1, const cv::Mat& gray2);
 public:
     static bool register_scans(Eigen::Matrix3f& R, Eigen::Vector3f& t, scan* scan1, scan* scan2);
     float error() const { return last_error; }
