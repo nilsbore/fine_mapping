@@ -67,12 +67,15 @@ catkin_package(
 ## Build ##
 ###########
 
+set(CORE_HEADERS
+include/primitive_refiner.h include/primitive_refiner.hpp include/refinement_core.h)
+
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(include ${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 
 ## Declare a cpp library
-#add_library(scan src/scan.cpp include/scan.h)
+add_library(refinement_core src/refinement_core.cpp ${CORE_HEADERS})
 
 ## Declare a cpp executable
 add_executable(test_refinement src/test_refinement.cpp)
@@ -82,10 +85,17 @@ add_executable(test_refinement src/test_refinement.cpp)
 #add_dependencies(save_scan mapping_refinement_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
+
+target_link_libraries(refinement_core
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBS}
+)
+
 target_link_libraries(test_refinement
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${OpenCV_LIBS}
+  refinement_core
 )
 
 #############
