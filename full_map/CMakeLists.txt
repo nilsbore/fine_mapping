@@ -76,10 +76,10 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(include /opt/ros/hydro/include/ ${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
-#link_directories(/opt/ros/hydro/lib/)
+link_directories(/opt/ros/hydro/lib/)
 
 ## Declare a cpp library
-#add_library(scan src/scan.cpp include/scan.h)
+add_library(pointcloud_common src/pointcloud_common.cpp include/pointcloud_common.h include/pointcloud_common.hpp)
 
 ## Declare a cpp executable
 add_executable(test_build_map src/test_build_map.cpp)
@@ -89,11 +89,19 @@ add_executable(test_build_map src/test_build_map.cpp)
 #add_dependencies(save_scan mapping_refinement_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
+target_link_libraries(pointcloud_common
+  ${PCL_LIBRARIES}
+)
 target_link_libraries(test_build_map
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${OpenCV_LIBS}
   ${QT_LIBRARIES}
+  pointcloud_common
+  g2o_core
+  g2o_types_slam3d
+  g2o_solver_csparse
+  g2o_stuff
   #opencv2_all
 )
 

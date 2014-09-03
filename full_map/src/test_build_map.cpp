@@ -6,14 +6,22 @@
 #include <pcl/visualization/pcl_visualizer.h>
 #include <boost/thread/thread.hpp>
 
+#include "pointcloud_common.h"
+
+#include "g2o/core/block_solver.h"
+#include "g2o/core/linear_solver.h"
+#include "g2o/core/optimization_algorithm_levenberg.h"
+#include "g2o/solvers/pcg/linear_solver_pcg.h"
+#include "g2o/types/slam3d/edge_se3.h"
+
 typedef pcl::PointXYZRGB PointType;
 
 typedef typename SemanticMapSummaryParser<PointType>::EntityStruct Entities;
 
 using namespace std;
 
-void register_scans(pcl::PointCloud<PointType>::Ptr& input_cloud_trans, pcl::PointCloud<PointType>::Ptr& target_cloud_trans,
-                    const Eigen::Vector3f& filtered_translation, const Eigen::Vector3f& target_translation)
+Eigen::Matrix4f register_scans(pcl::PointCloud<PointType>::Ptr& input_cloud_trans, pcl::PointCloud<PointType>::Ptr& target_cloud_trans,
+                               const Eigen::Vector3f& filtered_translation, const Eigen::Vector3f& target_translation)
 {
     pcl::PointCloud<PointType>::Ptr input_cloud(new pcl::PointCloud<PointType>);
     pcl::transformPointCloud(*input_cloud_trans, *input_cloud, -filtered_translation, Eigen::Quaternionf::Identity());
@@ -55,7 +63,7 @@ void register_scans(pcl::PointCloud<PointType>::Ptr& input_cloud_trans, pcl::Poi
     pcl::transformPointCloud(*input_cloud, *output_cloud, ndt.getFinalTransformation());
 
     // Initializing point cloud visualizer
-    boost::shared_ptr<pcl::visualization::PCLVisualizer>
+    /*boost::shared_ptr<pcl::visualization::PCLVisualizer>
             viewer_final (new pcl::visualization::PCLVisualizer ("3D Viewer"));
     viewer_final->setBackgroundColor (0, 0, 0);
 
@@ -83,6 +91,7 @@ void register_scans(pcl::PointCloud<PointType>::Ptr& input_cloud_trans, pcl::Poi
         viewer_final->spinOnce (100);
         boost::this_thread::sleep (boost::posix_time::microseconds (100000));
     }
+    viewer_final->close();*/
 }
 
 int main(int argc, char** argv)
@@ -114,14 +123,16 @@ int main(int argc, char** argv)
         string wid = roomData.roomWaypointId.substr(8);
         cout << "Waypoint: " << wid << endl;
         int ind = stoi(wid);
-        clouds[ind] = roomData.completeRoomCloud;
+        //clouds[ind] = roomData.completeRoomCloud;
         tf::Vector3 tforigin = roomData.vIntermediateRoomCloudTransforms[0].getOrigin();
         Eigen::Vector3f origin;
         for (size_t j = 0; j < 3; ++j) {
             origin(j) = tforigin.m_floats[j];
         }
         origins[ind] = origin;
-
+        //clouds[ind] = CloudPtr(new pcl::PointCloud<PointType>);
+        //pcl::transformPointCloud(*roomData.completeRoomCloud, *clouds[ind], -origin, Eigen::Quaternionf::Identity());
+        clouds[ind] = roomData.completeRoomCloud;
 
         /*cout<<"Complete cloud size "<<roomData.completeRoomCloud->points.size()<<endl;
         for (size_t i=0; i<roomData.vIntermediateRoomClouds.size(); i++)
@@ -131,6 +142,30 @@ int main(int argc, char** argv)
         }*/
     }
 
+    typedef g2o::BlockSolver<g2o::BlockSolverTraits<-1, -1> >  SlamBlockSolver;
+    typedef g2o::LinearSolverPCG<SlamBlockSolver::PoseMatrixType> SlamLinearSolver;
+
+    g2o::SparseOptimizer optimizer;
+    SlamLinearSolver* linearSolver = new SlamLinearSolver();
+    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
+    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(blockSolver);
+    solver->setUserLambdaInit(5); // 0
+    optimizer.setAlgorithm(solver);
+
+    std::vector<g2o::VertexSE3*> vertices(38);
+    for (size_t i = 2; i < 38; ++i)
+    {
+        g2o::VertexSE3* robot = new g2o::VertexSE3;
+        robot->setId(i);
+        Eigen::Isometry3d transform = Eigen::Isometry3d::Identity();
+        transform.matrix().block<3, 1>(0, 3) = origins[i].cast<double>();
+        robot->setEstimate(transform);
+        optimizer.addVertex(robot);
+        vertices[i] = robot;
+    }
+    Eigen::Matrix<double, 6, 6> information;
+    information.setIdentity();
+    information.bottomRightCorner<3, 3>() *= 100.0;
     for (size_t i = 2; i < 38; ++i)
     {
         //auto iterator = pairs.end();
@@ -138,8 +173,65 @@ int main(int argc, char** argv)
         while ((iter = std::find_if(iter, pairs.end(), [=](const pair_t& p) { return p.first == i; })) != pairs.end()) {
             //register(iter->first, iter->second);
             cout << iter->first << ", " << iter->second << endl;
-            register_scans(clouds[i], clouds[iter->second], origins[i], origins[iter->second]);
+            pcl::PointCloud<PointType>::Ptr temp_first(new pcl::PointCloud<PointType>);
+            pcl::PointCloud<PointType>::Ptr temp_second(new pcl::PointCloud<PointType>);
+            pointcloud_common<PointType> common(0.1);
+            common.set_input(clouds[i]);
+            common.set_target(clouds[iter->second]);
+            common.segment(*temp_first, *temp_second);
+            Eigen::Matrix4f res = register_scans(temp_first, temp_second, origins[i], origins[iter->second]);
+            Eigen::Isometry3d transform(res.cast<double>());
+            g2o::EdgeSE3* odometry = new g2o::EdgeSE3;
+            odometry->vertices()[0] = optimizer.vertex(iter->first);
+            odometry->vertices()[1] = optimizer.vertex(iter->second);
+            odometry->setMeasurement(transform);
+            odometry->setInformation(information);
+            optimizer.addEdge(odometry);
+
             ++iter;
         }
     }
+
+    optimizer.initializeOptimization();
+    std::cout << "Optimizing..." << std::endl;
+    optimizer.setVerbose(true);
+    optimizer.optimize(10);
+    std::cout << "Done optimizing!" << std::endl;
+
+    CloudPtr full_cloud(new pcl::PointCloud<PointType>);
+    //full_cloud.reserve(); // compute sum of points
+    for (size_t i = 2; i < 38; ++i)
+    {
+        pcl::PointCloud<PointType> temp;
+        pcl::transformPointCloud(*clouds[i], temp, -origins[i], Eigen::Quaternionf::Identity());
+        Eigen::Isometry3d estimate = vertices[i]->estimate();
+        Eigen::Isometry3f transform = estimate.cast<float>();
+        for (PointType& p : temp.points) {
+            p.getVector3fMap() = transform*p.getVector3fMap();
+        }
+        full_cloud->points.insert(full_cloud->points.end(), temp.points.begin(), temp.points.end());
+    }
+
+    // Initializing point cloud visualizer
+    boost::shared_ptr<pcl::visualization::PCLVisualizer>
+            viewer_final (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+    viewer_final->setBackgroundColor (0, 0, 0);
+
+    // Coloring and visualizing target cloud (red).
+    pcl::visualization::PointCloudColorHandlerRGBField<PointType> rgb(full_cloud);
+    viewer_final->addPointCloud<PointType> (full_cloud, rgb, "target cloud");
+    viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
+                                                    1, "target cloud");
+
+    // Starting visualizer
+    viewer_final->addCoordinateSystem (1.0);
+    viewer_final->initCameraParameters ();
+
+    // Wait until visualizer window is closed.
+    while (!viewer_final->wasStopped ())
+    {
+        viewer_final->spinOnce (100);
+        boost::this_thread::sleep (boost::posix_time::microseconds (100000));
+    }
+    viewer_final->close();
 }
