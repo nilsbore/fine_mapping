@@ -2,6 +2,7 @@
 
 #include <semanticMapSummaryParser.h>
 #include <pcl/registration/ndt.h>
+#include <pcl/filters/voxel_grid.h>
 
 #include <pcl/visualization/pcl_visualizer.h>
 #include <boost/thread/thread.hpp>
@@ -20,7 +21,7 @@ typedef typename SemanticMapSummaryParser<PointType>::EntityStruct Entities;
 
 using namespace std;
 
-Eigen::Matrix4f register_scans(pcl::PointCloud<PointType>::Ptr& input_cloud_trans, pcl::PointCloud<PointType>::Ptr& target_cloud_trans,
+Eigen::Matrix4f register_scans(double& score, pcl::PointCloud<PointType>::Ptr& input_cloud_trans, pcl::PointCloud<PointType>::Ptr& target_cloud_trans,
                                const Eigen::Vector3f& filtered_translation, const Eigen::Vector3f& target_translation)
 {
     pcl::PointCloud<PointType>::Ptr input_cloud(new pcl::PointCloud<PointType>);
@@ -59,11 +60,13 @@ Eigen::Matrix4f register_scans(pcl::PointCloud<PointType>::Ptr& input_cloud_tran
     std::cout << "Normal Distributions Transform has converged:" << ndt.hasConverged()
               << " score: " << ndt.getFitnessScore() << std::endl;
 
+    score = ndt.getFitnessScore();
+
     // Transforming unfiltered, input cloud using found transform.
     pcl::transformPointCloud(*input_cloud, *output_cloud, ndt.getFinalTransformation());
 
     // Initializing point cloud visualizer
-    /*boost::shared_ptr<pcl::visualization::PCLVisualizer>
+    boost::shared_ptr<pcl::visualization::PCLVisualizer>
             viewer_final (new pcl::visualization::PCLVisualizer ("3D Viewer"));
     viewer_final->setBackgroundColor (0, 0, 0);
 
@@ -91,7 +94,7 @@ Eigen::Matrix4f register_scans(pcl::PointCloud<PointType>::Ptr& input_cloud_tran
         viewer_final->spinOnce (100);
         boost::this_thread::sleep (boost::posix_time::microseconds (100000));
     }
-    viewer_final->close();*/
+    viewer_final->close();
 }
 
 int main(int argc, char** argv)
@@ -153,7 +156,7 @@ int main(int argc, char** argv)
     optimizer.setAlgorithm(solver);
 
     std::vector<g2o::VertexSE3*> vertices(38);
-    for (size_t i = 2; i < 38; ++i)
+    for (size_t i = 27; i < 38; ++i)
     {
         g2o::VertexSE3* robot = new g2o::VertexSE3;
         robot->setId(i);
@@ -165,31 +168,63 @@ int main(int argc, char** argv)
     }
     Eigen::Matrix<double, 6, 6> information;
     information.setIdentity();
-    information.bottomRightCorner<3, 3>() *= 100.0;
-    for (size_t i = 2; i < 38; ++i)
+    information.bottomRightCorner<3, 3>() *= 1000.0;
+    for (size_t i = 27; i < 38; ++i)
     {
-        //auto iterator = pairs.end();
-        vector<pair_t>::iterator iter = pairs.begin();
+        for (size_t j = 27; j < i; ++j) {
+            //register(iter->first, iter->second);
+            cout << i << ", " << j << endl;
+            pcl::PointCloud<PointType>::Ptr temp_first(new pcl::PointCloud<PointType>);
+            pcl::PointCloud<PointType>::Ptr temp_second(new pcl::PointCloud<PointType>);
+            pointcloud_common<PointType> common(0.3);
+            common.set_input(clouds[i]);
+            common.set_target(clouds[j]);
+            bool overlap = common.segment(*temp_first, *temp_second);
+            if (!overlap) {
+                continue;
+            }
+            double score;
+            Eigen::Matrix4f res = register_scans(score, temp_first, temp_second, origins[i], origins[j]);
+            Eigen::Isometry3d transform(res.cast<double>());
+            g2o::EdgeSE3* odometry = new g2o::EdgeSE3;
+            odometry->vertices()[0] = optimizer.vertex(i);
+            odometry->vertices()[1] = optimizer.vertex(j);
+            odometry->setMeasurement(transform);
+            odometry->setInformation(information);
+            if (score > 0.01) {
+                Eigen::Isometry3d first = vertices[i]->estimate();
+                Eigen::Isometry3d second = vertices[j]->estimate();
+                odometry->setMeasurement(first.inverse()*second);
+            }
+            optimizer.addEdge(odometry);
+        }
+        /*vector<pair_t>::iterator iter = pairs.begin();
         while ((iter = std::find_if(iter, pairs.end(), [=](const pair_t& p) { return p.first == i; })) != pairs.end()) {
             //register(iter->first, iter->second);
             cout << iter->first << ", " << iter->second << endl;
             pcl::PointCloud<PointType>::Ptr temp_first(new pcl::PointCloud<PointType>);
             pcl::PointCloud<PointType>::Ptr temp_second(new pcl::PointCloud<PointType>);
-            pointcloud_common<PointType> common(0.1);
+            pointcloud_common<PointType> common(0.3);
             common.set_input(clouds[i]);
             common.set_target(clouds[iter->second]);
-            common.segment(*temp_first, *temp_second);
-            Eigen::Matrix4f res = register_scans(temp_first, temp_second, origins[i], origins[iter->second]);
+            bool overlap = common.segment(*temp_first, *temp_second);
+            double score;
+            Eigen::Matrix4f res = register_scans(score, temp_first, temp_second, origins[i], origins[iter->second]);
             Eigen::Isometry3d transform(res.cast<double>());
             g2o::EdgeSE3* odometry = new g2o::EdgeSE3;
             odometry->vertices()[0] = optimizer.vertex(iter->first);
             odometry->vertices()[1] = optimizer.vertex(iter->second);
             odometry->setMeasurement(transform);
             odometry->setInformation(information);
+            if (score > 0.005) {
+                Eigen::Isometry3d first = vertices[iter->first]->estimate();
+                Eigen::Isometry3d second = vertices[iter->second]->estimate();
+                odometry->setMeasurement(first.inverse()*second);
+            }
             optimizer.addEdge(odometry);
 
             ++iter;
-        }
+        }*/
     }
 
     optimizer.initializeOptimization();
@@ -200,7 +235,7 @@ int main(int argc, char** argv)
 
     CloudPtr full_cloud(new pcl::PointCloud<PointType>);
     //full_cloud.reserve(); // compute sum of points
-    for (size_t i = 2; i < 38; ++i)
+    for (size_t i = 27; i < 38; ++i)
     {
         pcl::PointCloud<PointType> temp;
         pcl::transformPointCloud(*clouds[i], temp, -origins[i], Eigen::Quaternionf::Identity());
@@ -212,14 +247,20 @@ int main(int argc, char** argv)
         full_cloud->points.insert(full_cloud->points.end(), temp.points.begin(), temp.points.end());
     }
 
+    pcl::PointCloud<PointType>::Ptr cloud_subsampled(new pcl::PointCloud<PointType>);
+    pcl::VoxelGrid<PointType> sor;
+    sor.setInputCloud(full_cloud);
+    sor.setLeafSize(0.05f, 0.05f, 0.05f);
+    sor.filter(*cloud_subsampled);
+
     // Initializing point cloud visualizer
     boost::shared_ptr<pcl::visualization::PCLVisualizer>
             viewer_final (new pcl::visualization::PCLVisualizer ("3D Viewer"));
     viewer_final->setBackgroundColor (0, 0, 0);
 
     // Coloring and visualizing target cloud (red).
-    pcl::visualization::PointCloudColorHandlerRGBField<PointType> rgb(full_cloud);
-    viewer_final->addPointCloud<PointType> (full_cloud, rgb, "target cloud");
+    pcl::visualization::PointCloudColorHandlerRGBField<PointType> rgb(cloud_subsampled);
+    viewer_final->addPointCloud<PointType> (cloud_subsampled, rgb, "target cloud");
     viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
                                                     1, "target cloud");
 

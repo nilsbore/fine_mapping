@@ -19,7 +19,7 @@ public:
     void set_input(const_ptr_type firstin);
     void set_target(const_ptr_type secondin);
     bool segment(cloud_type& first_segmented, cloud_type& second_segmented) const;
-    pointcloud_common(float resolution, size_t threshold = 100) : resolution(resolution), threshold(threshold) {}
+    pointcloud_common(float resolution, size_t threshold = 10000) : resolution(resolution), threshold(threshold) {}
 };
 
 #include "pointcloud_common.hpp"
