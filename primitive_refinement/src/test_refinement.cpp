@@ -123,19 +123,23 @@ int main(int argc, char** argv)
     std::vector<base_primitive*> primitives = { new plane_primitive() };
     // sphere_primitive and cylinder_primitive have not been ported to the new framework yet
     primitive_params params;
-    params.number_disjoint_subsets = 10;
+    params.number_disjoint_subsets = 30;
     params.octree_res = 0.3;
     params.normal_neigbourhood = 0.07;
     params.inlier_threshold = 0.06;
     params.angle_threshold = 0.4;
     params.add_threshold = 0.01;
-    params.min_shape = 1000;
+    params.min_shape = 700;
     params.inlier_min = params.min_shape;
-    params.connectedness_res = 0.12;
-    params.distance_threshold = 4.0;
+    params.connectedness_res = 0.08;
+    params.distance_threshold = 0;
 
+    vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds;
+    clouds.push_back(subsampled_cloud);
+    vector<Vector3d, aligned_allocator<Vector3d> > cameras;
+    cameras.push_back(Vector3d(-4.28197, 7.81703, 1.67754)); // camera center, hardcoded for now
     primitive_visualizer<pcl::PointXYZRGB> viewer;
-    primitive_refiner<pcl::PointXYZRGB> extractor(subsampled_cloud, primitives, params, &viewer);
+    primitive_refiner<pcl::PointXYZRGB> extractor(cameras, clouds, primitives, params, &viewer);
     viewer.cloud = extractor.get_cloud();
     viewer.cloud_changed = true;
     viewer.cloud_normals = extractor.get_normals();
@@ -147,10 +151,6 @@ int main(int argc, char** argv)
     // use these to find out which planes might be connected through an occluded region
 
     // first question: where is the camera situated? lets assume (0, 0, 0) for now
-
-    // find all co-planar planes
-    typedef std::pair<size_t, size_t> plane_pair;
-    std::vector<plane_pair> plane_pairs;
 
     std::cout << "Primitives: " << extracted.size() << std::endl;
 

@@ -1,9 +1,36 @@
 #include "primitive_refiner.h"
 
+#include <algorithm>
+
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
 using namespace Eigen;
+
+template <typename Point>
+typename primitive_refiner<Point>::cloud_ptr primitive_refiner<Point>::fuse_clouds(std::vector<cloud_ptr>& clouds)
+{
+    cloud_ptr rtn(new cloud_type);
+    size_t divider = 0;
+    for (const cloud_ptr& cloud : clouds) {
+        rtn->points.insert(rtn->points.end(), cloud->points.begin(), cloud->points.end());
+        divider += cloud->points.size();
+    }
+    // dividers hasn't been initialized!
+    return rtn;
+}
+
+template <typename Point>
+void primitive_refiner<Point>::create_dividers(std::vector<size_t>& dividers, std::vector<cloud_ptr>& clouds)
+{
+    size_t divider = 0;
+    for (const cloud_ptr& cloud : clouds) {
+        divider += cloud->points.size();
+        dividers.push_back(divider);
+    }
+}
+
+
 
 template <typename Point>
 bool primitive_refiner<Point>::are_coplanar(base_primitive* p, base_primitive* q)
@@ -52,8 +79,6 @@ template <typename Point>
 plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_primitive* q,
                                                      cloud_ptr& cloud, float res)
 {
-    Vector3f center(-4.28197, 7.81703, 1.67754); // camera center, hardcoded for now
-
     MatrixXd points_p, points_q;
     super::primitive_inlier_points(points_p, p);
     super::primitive_inlier_points(points_q, q);
@@ -75,7 +100,7 @@ plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_pri
     // project the points into a common coordinate system, maybe the camera plane?
     Vector3d v, c;
     pr->direction_and_center(v, c); // should really be the rotation instead
-    if (v.dot(c - center.cast<double>()) > 0) {
+    if (v.dot(c - camera.cast<double>()) > 0) {
         v = -v;
     }
     float d = -v.dot(c);
@@ -101,11 +126,6 @@ plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_pri
     double width = xmax(1) - xmin(1);
     double height = ymax(2) - ymin(2);
 
-    std::cout << "xmin: " << xmin(1) << std::endl;
-    std::cout << "xmax: " << xmax(1) << std::endl;
-    std::cout << "ymin: " << ymin(2) << std::endl;
-    std::cout << "ymax: " << ymax(2) << std::endl;
-
     int w = int(width/res);
     int h = int(height/res);
 
@@ -122,7 +142,7 @@ plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_pri
             continue;
         }
         point = pp.getVector3fMap();
-        dir = point - center;
+        dir = point - camera;
         if (dir.dot(vf) > 0) { // correct
             continue;
         }
@@ -183,13 +203,13 @@ plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_pri
         return false;
     }
 
-    cv::Mat imcopy = im.clone();
+    /*cv::Mat imcopy = im.clone();
     imcopy = 65535*imcopy;
     cv::imshow("im", imcopy);
-    cv::waitKey(0);
+    cv::waitKey(0);*/
 
     int largest = base_primitive::find_blobs(im, false, false);
-    cv::Mat result = cv::Mat::zeros(h, w, CV_32SC1);
+    /*cv::Mat result = cv::Mat::zeros(h, w, CV_32SC1);
     for (size_t i = 0; i < result.rows; ++i) {
         for (size_t j = 0; j < result.cols; ++j) {
             if (im.at<int>(i, j) == largest) {
@@ -199,7 +219,7 @@ plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_pri
     }
 
     cv::imshow("result", result);
-    cv::waitKey(0);
+    cv::waitKey(0);*/
 
     u_char c1 = im.at<int>(y_p, x_p);
     u_char c2 = im.at<int>(y_q, x_q);
@@ -213,9 +233,60 @@ plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_pri
 }
 
 template <typename Point>
-void primitive_refiner<Point>::extract(std::vector<base_primitive*>& extracted)
+void primitive_refiner<Point>::rectify_normals(std::vector<base_primitive*>& extracted)
 {
-    super::extract(extracted);
+    Vector3d v, c;
+    for (base_primitive* p : extracted) {
+        if (p->get_shape() != base_primitive::PLANE) {
+            continue;
+        }
+        p->direction_and_center(v, c);
+        // if all cameras are on the same side of the plane, continue
+        double base_case = (cameras[0] - c).dot(v);
+        bool same = true;
+        for (const Vector3d& cc : cameras) {
+            if (base_case*(cc - c).dot(v) < 0) { // bad
+                same = false;
+                break;
+            }
+        }
+        if (same) {
+            if (base_case < 0) {
+                // switch direction
+                plane_primitive* planep = static_cast<plane_primitive*>(p);
+                planep->switch_direction();
+                continue;
+            }
+            else {
+                continue;
+            }
+        }
+        //super.primitive_inlier_points();
+        MatrixXd points;
+        super::primitive_inlier_points(points, p);
+        size_t place = 0;
+        std::vector<size_t> counts(dividers.size());
+        for (int inlier : p->supporting_inds) { // these should always be sorted after extraction
+            if (inlier < dividers[place]) {
+                counts[place]++;
+            }
+            else {
+                ++place;
+            }
+        }
+        std::vector<size_t>::iterator result = std::max_element(counts.begin(), counts.end());
+        size_t which_camera = std::distance(counts.begin(), result);
+        if ((cameras[which_camera] - c).dot(v) < 0) { // bad
+            // switch direction
+            plane_primitive* planep = static_cast<plane_primitive*>(p);
+            planep->switch_direction();
+        }
+    }
+}
+
+template <typename Point>
+void primitive_refiner<Point>::merge_coplanar_planes(std::vector<base_primitive*>& extracted)
+{
     while (true) {
         bool do_break = false;
         for (size_t i = 0; i < extracted.size(); ++i) {
@@ -245,4 +316,12 @@ void primitive_refiner<Point>::extract(std::vector<base_primitive*>& extracted)
             break;
         }
     }
+}
+
+template <typename Point>
+void primitive_refiner<Point>::extract(std::vector<base_primitive*>& extracted)
+{
+    super::extract(extracted);
+    rectify_normals(extracted);
+    merge_coplanar_planes(extracted);
 }

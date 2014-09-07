@@ -20,6 +20,10 @@ bool pointcloud_common<Point>::segment(cloud_type& first_segmented, cloud_type& 
             second_segmented.push_back(p);
         }
     }
+    /*first_octree::AlignedPointTVector first_centers;
+    first_octree.getOccupiedVoxelCenters(first_centers);
+    second_octree::AlignedPointTVector second_centers;
+    second_octree.getOccupiedVoxelCenters(second_centers);*/
     return first_segmented.size() > threshold && second_segmented.size() > threshold;
 }
 
