@@ -95,7 +95,7 @@ Eigen::Matrix4f register_scans(double& score, pcl::PointCloud<PointType>::Ptr& i
 
     // Transforming unfiltered, input cloud using found transform.*/
     //pcl::transformPointCloud(*input_cloud, *output_cloud, ndt.getFinalTransformation());
-    pcl::PointCloud<PointType>::Ptr vis_cloud(new pcl::PointCloud<PointType>);
+    /*pcl::PointCloud<PointType>::Ptr vis_cloud(new pcl::PointCloud<PointType>);
     pcl::transformPointCloud(*input_cloud, *vis_cloud, init_guess);
 
     // Initializing point cloud visualizer
@@ -134,7 +134,7 @@ Eigen::Matrix4f register_scans(double& score, pcl::PointCloud<PointType>::Ptr& i
         viewer_final->spinOnce (100);
         boost::this_thread::sleep (boost::posix_time::microseconds (100000));
     }
-    viewer_final->close();
+    viewer_final->close();*/
 
     return ndt.getFinalTransformation();
     //return icp.getFinalTransformation();
@@ -243,7 +243,7 @@ int main(int argc, char** argv)
         }
         Eigen::Matrix<double, 6, 6> information;
         information.setIdentity();
-        information.bottomRightCorner<3, 3>() *= 1.0; // 100.0
+        information.bottomRightCorner<3, 3>() *= 10.0; // 100.0
         for (size_t i = 0; i < room.size(); ++i)
         {
             for (size_t j = 0; j < i; ++j) {
@@ -254,7 +254,11 @@ int main(int argc, char** argv)
                 pointcloud_common<PointType> common(0.3);
                 common.set_input(clouds[room[i]]);
                 common.set_target(clouds[room[j]]);
-                bool overlap = common.segment(*temp_first, *temp_second);
+                //bool overlap = common.segment(*temp_first, *temp_second);
+                common.segment(*temp_first, *temp_second);
+                double volume = common.overlap_volume();
+                std::cout << "Volume: " << volume << std::endl;
+                bool overlap = volume > 15.0;
                 if (!overlap && j < i-1) {
                     continue;
                 }

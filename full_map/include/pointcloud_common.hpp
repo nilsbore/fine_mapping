@@ -28,6 +28,26 @@ bool pointcloud_common<Point>::segment(cloud_type& first_segmented, cloud_type& 
 }
 
 template <typename Point>
+double pointcloud_common<Point>::overlap_volume() const
+{
+    pcl::octree::OctreePointCloud<point_type> first_octree(resolution);
+    first_octree.setInputCloud(first);
+    pcl::octree::OctreePointCloud<point_type> second_octree(resolution);
+    second_octree.setInputCloud(second);
+    first_octree.addPointsFromInputCloud();
+    second_octree.addPointsFromInputCloud();
+    typename pcl::octree::OctreePointCloud<point_type>::AlignedPointTVector vec;
+    first_octree.getOccupiedVoxelCenters(vec);
+    size_t counter = 0;
+    for (const point_type& p : vec) {
+        if (second_octree.isVoxelOccupiedAtPoint(p)) {
+            ++counter;
+        }
+    }
+    return double(counter)*resolution*resolution*resolution;
+}
+
+template <typename Point>
 void pointcloud_common<Point>::set_input(const_ptr_type firstin)
 {
     first = firstin;
