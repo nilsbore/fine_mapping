@@ -12,12 +12,12 @@ bool pointcloud_common<Point>::segment(cloud_type& first_segmented, cloud_type& 
     second_octree.addPointsFromInputCloud();
     for (const point_type& p : second->points) {
         if (first_octree.isVoxelOccupiedAtPoint(p)) {
-            first_segmented.push_back(p);
+            second_segmented.push_back(p);
         }
     }
     for (const point_type& p : first->points) {
         if (second_octree.isVoxelOccupiedAtPoint(p)) {
-            second_segmented.push_back(p);
+            first_segmented.push_back(p);
         }
     }
     /*first_octree::AlignedPointTVector first_centers;

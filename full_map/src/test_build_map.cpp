@@ -36,16 +36,16 @@ Eigen::Matrix4f register_scans(double& score, pcl::PointCloud<PointType>::Ptr& i
 
     // Setting scale dependent NDT parameters
     // Setting minimum transformation difference for termination condition.
-    ndt.setTransformationEpsilon (0.0001);
+    ndt.setTransformationEpsilon (0.001);
     // Setting maximum step size for More-Thuente line search.
-    ndt.setStepSize(0.2);
+    ndt.setStepSize(0.1);
     //Setting Resolution of NDT grid structure (VoxelGridCovariance).
-    ndt.setResolution(0.6);
+    ndt.setResolution(1.0);
 
     // Setting max number of registration iterations.
-    ndt.setMaximumIterations(35);
+    ndt.setMaximumIterations(20);
 
-    ndt.setOulierRatio(0.4);
+    ndt.setOulierRatio(0.3);
 
     // Setting point cloud to be aligned.
     ndt.setInputSource(input_cloud);
@@ -56,6 +56,9 @@ Eigen::Matrix4f register_scans(double& score, pcl::PointCloud<PointType>::Ptr& i
     Eigen::AngleAxisf init_rotation = Eigen::AngleAxisf::Identity();
     Eigen::Translation3f init_translation(filtered_translation - target_translation);
     Eigen::Matrix4f init_guess = (init_translation * init_rotation).matrix ();
+
+    std::cout << "Init guess: " << std::endl;
+    std::cout << init_guess << std::endl;
 
     // Calculating required rigid transform to align the input cloud to the target cloud.
     pcl::PointCloud<PointType>::Ptr output_cloud(new pcl::PointCloud<PointType>);
@@ -91,7 +94,9 @@ Eigen::Matrix4f register_scans(double& score, pcl::PointCloud<PointType>::Ptr& i
     score = icp.getFitnessScore();
 
     // Transforming unfiltered, input cloud using found transform.*/
-    /*pcl::transformPointCloud(*input_cloud, *output_cloud, ndt.getFinalTransformation());
+    //pcl::transformPointCloud(*input_cloud, *output_cloud, ndt.getFinalTransformation());
+    pcl::PointCloud<PointType>::Ptr vis_cloud(new pcl::PointCloud<PointType>);
+    pcl::transformPointCloud(*input_cloud, *vis_cloud, init_guess);
 
     // Initializing point cloud visualizer
     boost::shared_ptr<pcl::visualization::PCLVisualizer>
@@ -112,6 +117,13 @@ Eigen::Matrix4f register_scans(double& score, pcl::PointCloud<PointType>::Ptr& i
     viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
                                                     1, "output cloud");
 
+    // Coloring and visualizing transformed input cloud (blue).
+    pcl::visualization::PointCloudColorHandlerCustom<PointType>
+            input_color (vis_cloud, 0, 0, 255);
+    viewer_final->addPointCloud<PointType> (vis_cloud, input_color, "input_cloud");
+    viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
+                                                    1, "input_cloud");
+
     // Starting visualizer
     viewer_final->addCoordinateSystem (1.0);
     viewer_final->initCameraParameters ();
@@ -122,7 +134,7 @@ Eigen::Matrix4f register_scans(double& score, pcl::PointCloud<PointType>::Ptr& i
         viewer_final->spinOnce (100);
         boost::this_thread::sleep (boost::posix_time::microseconds (100000));
     }
-    viewer_final->close();*/
+    viewer_final->close();
 
     return ndt.getFinalTransformation();
     //return icp.getFinalTransformation();
@@ -210,7 +222,7 @@ int main(int argc, char** argv)
         SlamLinearSolver* linearSolver = new SlamLinearSolver();
         SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
         g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(blockSolver);
-        solver->setUserLambdaInit(5); // 0
+        solver->setUserLambdaInit(1); // 0
         optimizer.setAlgorithm(solver);
 
         std::vector<g2o::VertexSE3*> vertices(room.size());
@@ -231,7 +243,7 @@ int main(int argc, char** argv)
         }
         Eigen::Matrix<double, 6, 6> information;
         information.setIdentity();
-        information.bottomRightCorner<3, 3>() *= 100.0;
+        information.bottomRightCorner<3, 3>() *= 1.0; // 100.0
         for (size_t i = 0; i < room.size(); ++i)
         {
             for (size_t j = 0; j < i; ++j) {
@@ -267,7 +279,7 @@ int main(int argc, char** argv)
             optimizer.initializeOptimization();
             std::cout << "Optimizing..." << std::endl;
             optimizer.setVerbose(true);
-            optimizer.optimize(10);
+            optimizer.optimize(30);
             std::cout << "Done optimizing!" << std::endl;
         }
 
@@ -280,6 +292,23 @@ int main(int argc, char** argv)
         string tname = folder + ss.str() + string("/origins.txt");
         tfile.open(tname.c_str());
 
+        // Initializing point cloud visualizer
+        boost::shared_ptr<pcl::visualization::PCLVisualizer>
+                viewer_final (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+        viewer_final->setBackgroundColor (0, 0, 0);
+
+        for (g2o::HyperGraph::Edge* e : optimizer.edges()) {
+            g2o::EdgeSE3* es = (g2o::EdgeSE3*)e;
+            g2o::VertexSE3* vs0 = (g2o::VertexSE3*)es->vertices()[0];
+            g2o::VertexSE3* vs1 = (g2o::VertexSE3*)es->vertices()[1];
+            Eigen::Isometry3d first = vs0->estimate();
+            Eigen::Isometry3d second = vs1->estimate();
+            std::cout << "After optimization: " << std::endl;
+            Eigen::Matrix4d mat = (second.inverse()*first).matrix();
+            std::cout << mat << std::endl;
+            //std::cout << es->error().transpose() << std::endl;
+        }
+
         //CloudPtr full_cloud(new pcl::PointCloud<PointType>);
         //full_cloud.reserve(); // compute sum of points
         for (size_t i = 0; i < room.size(); ++i)
@@ -290,23 +319,42 @@ int main(int argc, char** argv)
             }*/
             tfile << origins[room[i]].transpose() << "\n";
 
-            pcl::PointCloud<PointType> temp;
-            pcl::transformPointCloud(*clouds[room[i]], temp, -origins[room[i]], Eigen::Quaternionf::Identity());
+            pcl::PointCloud<PointType>::Ptr temp(new pcl::PointCloud<PointType>);
+            //pcl::PointCloud<PointType>::Ptr temp2(new pcl::PointCloud<PointType>);
+            pcl::transformPointCloud(*clouds[room[i]], *temp, -origins[room[i]], Eigen::Quaternionf::Identity());
             Eigen::Isometry3d estimate = vertices[i]->estimate();
             Eigen::Isometry3f transform = estimate.cast<float>();
-            for (PointType& p : temp.points) {
+            //pcl::transformPointCloud(*temp, *temp2, transform);
+            for (PointType& p : temp->points) {
                 p.getVector3fMap() = transform*p.getVector3fMap();
             }
 
             stringstream rr;
             rr << "/cloud" << setfill('0') << setw(6) << i << ".pcd";
-            pcl::io::savePCDFileBinary(folder + ss.str() + rr.str(), temp);
+            pcl::io::savePCDFileBinary(folder + ss.str() + rr.str(), *temp);
             //full_cloud->points.insert(full_cloud->points.end(), temp.points.begin(), temp.points.end());
 
             room_clouds[counter][i] = CloudPtr(new pcl::PointCloud<PointType>);
-            pcl::copyPointCloud(temp, *room_clouds[counter][i]);
+            pcl::copyPointCloud(*temp, *room_clouds[counter][i]);
+
+            // Coloring and visualizing target cloud (red).
+            pcl::visualization::PointCloudColorHandlerRGBField<PointType> rgb(temp);
+            viewer_final->addPointCloud<PointType> (temp, rgb, string("cloud") + to_string(i));
+            viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
+                                                            1, string("cloud") + to_string(i));
         }
         tfile.close();
+        // Starting visualizer
+        viewer_final->addCoordinateSystem (1.0);
+        viewer_final->initCameraParameters ();
+
+        // Wait until visualizer window is closed.
+        while (!viewer_final->wasStopped ())
+        {
+            viewer_final->spinOnce (100);
+            boost::this_thread::sleep (boost::posix_time::microseconds (100000));
+        }
+        viewer_final->close();
 
         /*pcl::VoxelGrid<PointType> sor;
         sor.setInputCloud(full_cloud);
