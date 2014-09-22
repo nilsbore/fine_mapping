@@ -103,27 +103,6 @@ void hull_as_marker(std::vector<Vector3d, aligned_allocator<Vector3d> >& p, cons
     pub.publish(marker);
 }
 
-/*bool visualize_hulls(base_primitive* p, base_primitive* q)
-{
-    // get convex hull of p and q: P, Q
-    std::vector<Vector3d, aligned_allocator<Vector3d> > hull_p;
-    std::vector<Vector3d, aligned_allocator<Vector3d> > hull_q;
-    std::vector<Vector3d, aligned_allocator<Vector3d> > hull;
-
-    plane_primitive* pp = static_cast<plane_primitive*>(p);
-    plane_primitive* pq = static_cast<plane_primitive*>(q);
-    plane_primitive pr;
-    pr.merge_planes(*pp, *pq);
-
-    p->shape_points(hull_p);
-    q->shape_points(hull_q);
-    pr.shape_points(hull);
-
-    hull_as_marker(hull, Vector3f(1, 0, 0));
-    hull_as_marker(hull_p, Vector3f(0, 1, 0));
-    hull_as_marker(hull_q, Vector3f(0, 0, 1));
-}*/
-
 int main(int argc, char** argv)
 {
     ros::init(argc, argv, "test_refinement");
@@ -240,9 +219,11 @@ int main(int argc, char** argv)
     }
 
     create_folder(graph_folder);
-    for (size_t i = 0; i < clouds.size(); ++i) {
-        // sphere_primitive and cylinder_primitive have not been ported to the new framework yet
-        /*float subsampling_voxel_size = 0.04;
+    //for (size_t i = 0; i < clouds.size(); ++i) {
+    size_t i = 0;
+    float patch_width = 3.0;
+    // sphere_primitive and cylinder_primitive have not been ported to the new framework yet
+    /*float subsampling_voxel_size = 0.04;
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr subsampled_cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
         pcl::VoxelGrid<pcl::PointXYZRGB> sor;
         sor.setInputCloud(cloud);
@@ -250,11 +231,18 @@ int main(int argc, char** argv)
         sor.filter(*subsampled_cloud);
         std::cout << "Downsampled to " << subsampled_cloud->points.size() << std::endl;*/
 
-        vector<base_primitive*> primitives = { new plane_primitive() };
-        // sphere_primitive and cylinder_primitive have not been ported to the new framework yet
-        primitive_params params;
-        // Not subsampled
-        /*params.number_disjoint_subsets = 60;
+    auto x_comp = [](const pcl::PointXYZRGB& p1, const pcl::PointXYZRGB& p2) { return p1.x < p2.x; };
+    auto y_comp = [](const pcl::PointXYZRGB& p1, const pcl::PointXYZRGB& p2) { return p1.y < p2.y; };
+    auto maxx = std::max_element(clouds[i]->points.begin(), clouds[i]->points.end(), x_comp)->x;
+    auto minx = std::min_element(clouds[i]->points.begin(), clouds[i]->points.end(), x_comp)->x;
+    auto miny = std::min_element(clouds[i]->points.begin(), clouds[i]->points.end(), y_comp)->y;
+    auto maxy = std::max_element(clouds[i]->points.begin(), clouds[i]->points.end(), y_comp)->y;
+
+    vector<base_primitive*> primitives = { new plane_primitive() };
+    // sphere_primitive and cylinder_primitive have not been ported to the new framework yet
+    primitive_params params;
+    // Not subsampled
+    /*params.number_disjoint_subsets = 60;
         params.octree_res = 0.6;
         params.normal_neigbourhood = 0.07;
         params.inlier_threshold = 0.07;
@@ -264,25 +252,24 @@ int main(int argc, char** argv)
         params.inlier_min = params.min_shape;
         params.connectedness_res = 0.06;
         params.distance_threshold = 0;*/
-        // 0.05 subsampled
-        params.number_disjoint_subsets = 80;
-        params.octree_res = 0.6;
-        params.normal_neigbourhood = 0.09;
-        params.inlier_threshold = 0.12;
-        params.angle_threshold = 0.4;
-        params.add_threshold = 0.05;
-        params.min_shape = 3000;
-        params.inlier_min = params.min_shape;
-        params.connectedness_res = 0.07;
-        params.distance_threshold = 0;
+    // 0.05 subsampled
+    params.number_disjoint_subsets = 80;
+    params.octree_res = 0.6;
+    params.normal_neigbourhood = 0.09;
+    params.inlier_threshold = 0.12;
+    params.angle_threshold = 0.4;
+    params.add_threshold = 0.05;
+    params.min_shape = 3000;
+    params.inlier_min = params.min_shape;
+    params.connectedness_res = 0.07;
+    params.distance_threshold = 0;
 
-        cout << "Starting algorithm..." << endl;
-        cout << "Cameras size: " << cameras[i].size() << endl;
-        cout << "Clouds size: " << clouds[i].size() << endl;
+    cout << "Starting algorithm..." << endl;
+    cout << "Cameras size: " << cameras[i].size() << endl;
+    cout << "Clouds size: " << clouds[i].size() << endl;
 
-        //primitive_visualizer<pcl::PointXYZRGB> viewer;
-        primitive_refiner<pcl::PointXYZRGB> extractor(cameras[i], clouds[i], primitives, params, NULL);//&viewer);
-        /*auto tcloud = extractor.get_cloud();
+    primitive_refiner<pcl::PointXYZRGB> extractor(cameras[i], clouds[i], primitives, params, NULL);//&viewer);
+    /*auto tcloud = extractor.get_cloud();
         auto tnormals = extractor.get_normals();
 
         boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
@@ -298,73 +285,57 @@ int main(int argc, char** argv)
             viewer->spinOnce(100);
             boost::this_thread::sleep(boost::posix_time::microseconds(100000));
         }*/
+    vector<base_primitive*> extracted;
+    std::vector<std::vector<int> > camera_ids;
+    extractor.extract(extracted, camera_ids);
 
-        /*viewer.cloud = extractor.get_cloud();
-        viewer.cloud_changed = true;
-        viewer.cloud_normals = extractor.get_normals();
-        viewer.normals_changed = true;
-        viewer.create_thread();*/
-        vector<base_primitive*> extracted;
-        std::vector<std::vector<int> > camera_ids;
-        extractor.extract(extracted, camera_ids);
-        // in the primitives are the indices of all the inliers
-        // use these to find out which planes might be connected through an occluded region
+    cout << "Primitives: " << extracted.size() << endl;
 
-        // first question: where is the camera situated? lets assume (0, 0, 0) for now
-
-        cout << "Primitives: " << extracted.size() << endl;
-
-        for (base_primitive* b : extracted) {
-            if (b->get_shape() != base_primitive::PLANE) {
-                continue;
-            }
-            vector<Vector3d, aligned_allocator<Vector3d> > hull;
-            b->shape_points(hull);
-            Eigen::Vector3d c, v;
-            b->direction_and_center(v, c);
-            hull_as_marker(hull, Vector3f(0, 1, 0), v, c);
+    for (base_primitive* b : extracted) {
+        if (b->get_shape() != base_primitive::PLANE) {
+            continue;
         }
-
-        vector<Eigen::MatrixXd> inliers;
-        inliers.resize(extracted.size());
-        for (int i = 0; i < extracted.size(); ++i) {
-            extractor.primitive_inlier_points(inliers[i], extracted[i]);
-        }
-
-        graph_extractor ge(extracted, inliers, camera_ids, 1.0); // how close to be considered connected
-
-        stringstream ss;
-        ss << "/graph" << setfill('0') << setw(6) << i << ".dot";
-        cout << ss.str() << endl;
-        string graphfile = graph_folder + ss.str();
-        string imagefile = graph_folder + "test.png";
-        ge.generate_dot_file(graphfile);
-        string command = "dot -Tpng " + graphfile + " > " + imagefile + " && gvfs-open " + imagefile;
-        //system(command.c_str());
-
-        ss.str("");
-        ss << "/indices" << setfill('0') << setw(6) << i << ".txt";
-        string indexfile = graph_folder + ss.str();
-        ge.generate_index_file(indexfile);
-
-        ss.str("");
-        ss << "/cloud" << setfill('0') << setw(6) << i << ".pcd";
-        string cloudfile = graph_folder + ss.str();
-        pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud = extractor.get_cloud();
-        pcl::io::savePCDFileBinary(cloudfile, *cloud);
-
-        pcl::PointCloud<pcl::PointXYZRGB> pub_cloud;
-        pcl::copyPointCloud(*cloud, pub_cloud);
-        pub_cloud.header.frame_id = "/map";
-        cloud_pub.publish(pub_cloud);
-        // find regions through which they would be connected
-
-        // are these regions occluded? -> connect
-
-        cout << "The algorithm has finished..." << endl;
-
-        //viewer.join_thread();
+        vector<Vector3d, aligned_allocator<Vector3d> > hull;
+        b->shape_points(hull);
+        Eigen::Vector3d c, v;
+        b->direction_and_center(v, c);
+        hull_as_marker(hull, Vector3f(0, 1, 0), v, c);
     }
+
+    vector<Eigen::MatrixXd> inliers;
+    inliers.resize(extracted.size());
+    for (int i = 0; i < extracted.size(); ++i) {
+        extractor.primitive_inlier_points(inliers[i], extracted[i]);
+    }
+
+    graph_extractor ge(extracted, inliers, camera_ids, 1.0); // how close to be considered connected
+
+    stringstream ss;
+    ss << "/graph" << setfill('0') << setw(6) << i << ".dot";
+    cout << ss.str() << endl;
+    string graphfile = graph_folder + ss.str();
+    string imagefile = graph_folder + "test.png";
+    ge.generate_dot_file(graphfile);
+    string command = "dot -Tpng " + graphfile + " > " + imagefile + " && gvfs-open " + imagefile;
+    //system(command.c_str());
+
+    ss.str("");
+    ss << "/indices" << setfill('0') << setw(6) << i << ".txt";
+    string indexfile = graph_folder + ss.str();
+    ge.generate_index_file(indexfile);
+
+    ss.str("");
+    ss << "/cloud" << setfill('0') << setw(6) << i << ".pcd";
+    string cloudfile = graph_folder + ss.str();
+    pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cloud = extractor.get_cloud();
+    pcl::io::savePCDFileBinary(cloudfile, *cloud);
+
+    pcl::PointCloud<pcl::PointXYZRGB> pub_cloud;
+    pcl::copyPointCloud(*cloud, pub_cloud);
+    pub_cloud.header.frame_id = "/map";
+    cloud_pub.publish(pub_cloud);
+
+    cout << "The algorithm has finished..." << endl;
 
     return 0;
 }

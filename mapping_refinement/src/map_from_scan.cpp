@@ -8,12 +8,17 @@
 int main(int argc, char** argv)
 {
     std::vector<scan*> scans;
+    std::string folder = "/home/nbore/Data/20140813/patrol_run_1/room_0/";
+    std::string stitched_file = folder + std::string("fine_cloud.pcd");
+    std::string xml_file = folder + std::string("room.xml");
+    std::string camera_file = folder + std::string("camera_pose.txt");
 
+    Eigen::Vector3f camera(0.0, 0.0, 0.0);
     {
         SimpleXMLParser<pcl::PointXYZRGB> parser;
         SimpleXMLParser<pcl::PointXYZRGB>::RoomData room_data;
 
-        room_data = parser.loadRoomFromXML("/home/nbore/Data/20140813/patrol_run_1/room_0/room.xml");
+        room_data = parser.loadRoomFromXML(xml_file);
 
         std::cout << "Complete cloud size: " << room_data.completeRoomCloud->points.size() << std::endl;
 
@@ -40,13 +45,28 @@ int main(int argc, char** argv)
                 }
             }
             scans.push_back(new scan(*room_data.vIntermediateRoomClouds[i], origin, basis, K));
+            camera += origin;
         }
+        camera /= float(room_data.vIntermediateRoomClouds.size());
     }
 
     fine_mapping f(scans);
     f.build_graph();
     f.optimize_graph();
     stitched_map map(scans);
-    map.visualize();
+    //map.visualize();
+
+    pcl::PointCloud<pcl::PointXYZRGB> stitched_cloud;
+    map.merge_clouds(stitched_cloud);
+    pcl::io::savePCDFileBinary(stitched_file, stitched_cloud);
+
+    // need to save the camera point as well
+    std::ofstream camera_file_object;
+    camera_file_object.open(camera_file.c_str());
+    for (size_t i = 0; i < 3; ++i) {
+        camera_file_object << camera(i) << " ";
+    }
+    camera_file_object.close();
+
     return 0;
 }

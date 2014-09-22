@@ -112,12 +112,12 @@ void fine_mapping::build_graph()
     // good information
     Eigen::Matrix<double, 6, 6> good_info;
     good_info.setIdentity();
-    good_info.bottomRightCorner<3, 3>() *= 100.0;
+    good_info.bottomRightCorner<3, 3>() *= 1000.0;
 
     // bad information
     Eigen::Matrix<double, 6, 6> bad_info;
     bad_info.setIdentity();
-    bad_info.bottomRightCorner<3, 3>() *= 100.0;
+    bad_info.bottomRightCorner<3, 3>() *= 1000.0;
     bad_info /= 10.0;
 
     // second add the odometry constraints

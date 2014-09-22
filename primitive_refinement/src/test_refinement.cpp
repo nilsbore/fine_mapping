@@ -146,7 +146,8 @@ int main(int argc, char** argv)
     viewer.normals_changed = true;
     viewer.create_thread();
     std::vector<base_primitive*> extracted;
-    extractor.extract(extracted);
+    std::vector<std::vector<int> > camera_ids;
+    extractor.extract(extracted, camera_ids);
     // in the primitives are the indices of all the inliers
     // use these to find out which planes might be connected through an occluded region
 

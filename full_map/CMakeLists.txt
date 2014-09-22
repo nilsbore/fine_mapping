@@ -83,6 +83,9 @@ add_library(pointcloud_common src/pointcloud_common.cpp include/pointcloud_commo
 
 ## Declare a cpp executable
 add_executable(test_build_map src/test_build_map.cpp)
+add_executable(test_build_final src/test_build_final.cpp)
+add_executable(test_build_final2 src/test_build_final2.cpp)
+add_executable(make_full_scans src/make_full_scans.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -92,7 +95,47 @@ add_executable(test_build_map src/test_build_map.cpp)
 target_link_libraries(pointcloud_common
   ${PCL_LIBRARIES}
 )
+
 target_link_libraries(test_build_map
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS}
+  ${QT_LIBRARIES}
+  pointcloud_common
+  g2o_core
+  g2o_types_slam3d
+  g2o_solver_csparse
+  g2o_stuff
+  #opencv2_all
+)
+
+target_link_libraries(test_build_final
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS}
+  ${QT_LIBRARIES}
+  pointcloud_common
+  g2o_core
+  g2o_types_slam3d
+  g2o_solver_csparse
+  g2o_stuff
+  #opencv2_all
+)
+
+target_link_libraries(test_build_final2
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS}
+  ${QT_LIBRARIES}
+  pointcloud_common
+  g2o_core
+  g2o_types_slam3d
+  g2o_solver_csparse
+  g2o_stuff
+  #opencv2_all
+)
+
+target_link_libraries(make_full_scans
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${OpenCV_LIBS}

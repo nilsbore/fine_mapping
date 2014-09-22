@@ -82,6 +82,9 @@ add_library(conversions src/conversions.cpp include/conversions.h)
 ## Declare a cpp executable
 add_executable(test_refinement src/test_refinement.cpp)
 add_executable(test_multiple_clouds src/test_multiple_clouds.cpp)
+add_executable(split_multiple_clouds src/split_multiple_clouds.cpp)
+add_executable(split_multiple_final src/split_multiple_final.cpp)
+add_executable(split_multiple_final2 src/split_multiple_final2.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -107,6 +110,30 @@ target_link_libraries(test_refinement
 )
 
 target_link_libraries(test_multiple_clouds
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS}
+  refinement_core
+  graph_extractor
+)
+
+target_link_libraries(split_multiple_clouds
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS}
+  refinement_core
+  graph_extractor
+)
+
+target_link_libraries(split_multiple_final
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS}
+  refinement_core
+  graph_extractor
+)
+
+target_link_libraries(split_multiple_final2
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   ${OpenCV_LIBS}

@@ -16,7 +16,7 @@ typename primitive_refiner<Point>::cloud_ptr primitive_refiner<Point>::fuse_clou
         rtn->points.insert(rtn->points.end(), cloud->points.begin(), cloud->points.end());
         divider += cloud->points.size();
     }
-    // dividers hasn't been initialized!
+    //rtn->is_dense = false;
     return rtn;
 }
 
@@ -30,7 +30,26 @@ void primitive_refiner<Point>::create_dividers(std::vector<size_t>& dividers, st
     }
 }
 
-
+template <typename Point>
+void primitive_refiner<Point>::rectify_normals()
+{
+    size_t divider = 0;
+    Eigen::Vector3d cam = cameras[0];
+    double prod;
+    for (size_t i = 0; i < super::mpoints.cols(); ++i) {
+        if (i >= dividers[divider]) {
+            ++divider;
+            cam = cameras[divider];
+        }
+        prod = super::mnormals.col(i).dot(cam - super::mpoints.col(i));
+        if (prod < 0) {
+            super::mnormals.col(i) = -super::mnormals.col(i);
+            super::cloud_normals->points[i].normal_x *= -1.0;
+            super::cloud_normals->points[i].normal_y *= -1.0;
+            super::cloud_normals->points[i].normal_z *= -1.0;
+        }
+    }
+}
 
 template <typename Point>
 bool primitive_refiner<Point>::are_coplanar(base_primitive* p, base_primitive* q)
@@ -48,7 +67,7 @@ bool primitive_refiner<Point>::are_coplanar(base_primitive* p, base_primitive* q
     q->shape_data(par_q);
     Vector3d diff = c_p - c_q;
     diff.normalize();
-    bool same_direction = acos(fabs(v_p.dot(v_q))) < angle_threshold;
+    bool same_direction = acos(v_p.dot(v_q)) < angle_threshold;
     double dist_p = fabs(c_p.dot(par_q.segment<3>(0)) + par_q(3));
     double dist_q = fabs(c_q.dot(par_p.segment<3>(0)) + par_p(3));
     bool same_depth = dist_p < distance_threshold && dist_q < distance_threshold;
@@ -77,11 +96,13 @@ bool primitive_refiner<Point>::contained_in_hull(const Vector3d& point, const st
 
 template <typename Point>
 plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_primitive* q,
-                                                     cloud_ptr& cloud, float res)
+                                                     cloud_ptr& cloud, float res,
+                                                     std::vector<int>& p_camera_ids, std::vector<int>& q_camera_ids)
 {
     MatrixXd points_p, points_q;
     super::primitive_inlier_points(points_p, p);
     super::primitive_inlier_points(points_q, q);
+    // check distance of closest points before doing anything else
 
     // get convex hull of p and q: P, Q
     std::vector<Vector3d, aligned_allocator<Vector3d> > hull_p;
@@ -93,6 +114,9 @@ plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_pri
     plane_primitive* pr = new plane_primitive;
     pr->merge_planes(*pp, *pq);
 
+    std::vector<int> r_camera_ids = p_camera_ids;
+    r_camera_ids.insert(r_camera_ids.end(), q_camera_ids.begin(), q_camera_ids.end());
+
     p->shape_points(hull_p);
     q->shape_points(hull_q);
     pr->shape_points(hull);
@@ -100,9 +124,9 @@ plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_pri
     // project the points into a common coordinate system, maybe the camera plane?
     Vector3d v, c;
     pr->direction_and_center(v, c); // should really be the rotation instead
-    if (v.dot(c - camera.cast<double>()) > 0) {
+    /*if (v.dot(c - camera.cast<double>()) > 0) { // change to be the cameras of the plane, throw an exception if wrong
         v = -v;
-    }
+    }*/
     float d = -v.dot(c);
 
     // just pick the basis of the first one
@@ -137,11 +161,34 @@ plane_primitive* primitive_refiner<Point>::try_merge(base_primitive* p, base_pri
     Matrix3f Rf = R.cast<float>().transpose();
     Vector3f vf = v.cast<float>();
     Vector3f minf(0, xmin(1), ymin(2));
-    for (const point_type& pp : cloud->points) {
+    Vector3f camera;
+    int divider = 0;
+    int camera_id;
+    for (size_t i = 0; i < cloud->points.size(); ++i) {
+        if (dividers[divider] <= i) {
+            ++divider;
+        }
+        const point_type& pp = cloud->points[i];
         if (isinf(pp.z) || isnan(pp.z)) {
             continue;
         }
+        // check if the divider is any of the camera id's, otherwise skip
+        /*bool found = false;
+        for (int id : r_camera_ids) {
+            if (divider == id) {
+                found = true;
+                camera_id = id;
+            }
+        }
+        if (!found) {
+            continue;
+        }*/
+        // would be more intelligent to loop through the camera id's and index the dividers
+        if (!(std::find(r_camera_ids.begin(), r_camera_ids.end(), divider) != r_camera_ids.end())) {
+            continue;
+        }
         point = pp.getVector3fMap();
+        camera = cameras[camera_id].cast<float>();
         dir = point - camera;
         if (dir.dot(vf) > 0) { // correct
             continue;
@@ -262,8 +309,6 @@ void primitive_refiner<Point>::rectify_normals(std::vector<base_primitive*>& ext
             }
         }
         //super.primitive_inlier_points();
-        MatrixXd points;
-        super::primitive_inlier_points(points, p);
         size_t place = 0;
         std::vector<size_t> counts(dividers.size());
         for (int inlier : p->supporting_inds) { // these should always be sorted after extraction
@@ -285,7 +330,7 @@ void primitive_refiner<Point>::rectify_normals(std::vector<base_primitive*>& ext
 }
 
 template <typename Point>
-void primitive_refiner<Point>::merge_coplanar_planes(std::vector<base_primitive*>& extracted)
+void primitive_refiner<Point>::merge_coplanar_planes(std::vector<base_primitive*>& extracted, std::vector<std::vector<int> >& camera_ids)
 {
     while (true) {
         bool do_break = false;
@@ -297,13 +342,31 @@ void primitive_refiner<Point>::merge_coplanar_planes(std::vector<base_primitive*
                     continue;
                 }
                 std::cout << "The primitives are co-planar" << std::endl;
-                plane_primitive* pp = try_merge(extracted[i], extracted[j], super::cloud, 1.2*super::params.connectedness_res);
+                plane_primitive* pp = try_merge(extracted[i], extracted[j], super::cloud, 1.2*super::params.connectedness_res, camera_ids[i], camera_ids[j]);
                 if (pp != NULL) { // once found, redo the whole scheme for now
                     std::cout << "And they may also be connected" << std::endl;
+                    // delete the merged planes
                     extracted.erase(std::remove_if(extracted.begin(), extracted.end(), [=](const base_primitive* b) { return b == p || b == q; } ), extracted.end());
                     delete p;
                     delete q;
+                    // add the new merged plane
                     extracted.push_back(pp);
+
+                    // make the new plane have the same camera_ids as the merged ones
+                    camera_ids.push_back(camera_ids[i]);
+                    camera_ids.back().insert(camera_ids.back().end(), camera_ids[j].begin(), camera_ids[j].end());
+                    std::sort(camera_ids.back().begin(), camera_ids.back().end());
+                    camera_ids.back().erase(std::unique( camera_ids.back().begin(), camera_ids.back().end()), camera_ids.back().end());
+                    // remove the camera_ids for the merged planes
+                    if (i > j) {
+                        camera_ids.erase(camera_ids.begin() + i);
+                        camera_ids.erase(camera_ids.begin() + j);
+                    }
+                    else {
+                        camera_ids.erase(camera_ids.begin() + j);
+                        camera_ids.erase(camera_ids.begin() + i);
+                    }
+
                     do_break = true;
                     break;
                 }
@@ -319,9 +382,63 @@ void primitive_refiner<Point>::merge_coplanar_planes(std::vector<base_primitive*
 }
 
 template <typename Point>
-void primitive_refiner<Point>::extract(std::vector<base_primitive*>& extracted)
+void primitive_refiner<Point>::compute_camera_ids(std::vector<base_primitive*>& extracted, std::vector<std::vector<int> >& camera_ids)
+{
+    camera_ids.resize(extracted.size());
+    for (size_t i = 0; i < extracted.size(); ++i) {
+        size_t place = 0;
+        std::vector<size_t> counts(dividers.size());
+        for (int inlier : extracted[i]->supporting_inds) { // these should always be sorted after extraction
+            if (inlier < dividers[place]) {
+                counts[place]++;
+            }
+            else {
+                ++place;
+            }
+        }
+        for (int j = 0; j < counts.size(); ++j) {
+            //if (double(counts[j]) > 0.3*double(extracted[i]->supporting_inds.size())) { // could be a good idea to base this on number of points for larger surfaces
+            if (double(counts[j]) > 0.2*double(super::params.inlier_min)) {
+                camera_ids[i].push_back(j);
+            }
+        }
+    }
+}
+
+template <typename Point>
+void primitive_refiner<Point>::remove_floor_planes(std::vector<base_primitive*>& extracted)
+{
+    std::vector<size_t> floor_planes;
+    size_t counter = 0;
+    for (base_primitive* p : extracted) {
+        if (p->get_shape() != base_primitive::PLANE) {
+            ++counter;
+            continue;
+        }
+        Vector3d v;
+        Vector3d c;
+        p->direction_and_center(v, c);
+        bool same_direction = acos(fabs(v(2))) < angle_threshold;
+        bool same_depth = fabs(c(2)) < 2.0*distance_threshold;
+        if (same_depth && same_direction) {
+            floor_planes.push_back(counter);
+        }
+        ++counter;
+    }
+
+    for (int i = floor_planes.size()-1; i >= 0; --i) {
+        delete extracted[floor_planes[i]];
+        extracted.erase(extracted.begin() + floor_planes[i]);
+    }
+}
+
+template <typename Point>
+void primitive_refiner<Point>::extract(std::vector<base_primitive*>& extracted, std::vector<std::vector<int> >& camera_ids)
 {
     super::extract(extracted);
-    rectify_normals(extracted);
-    merge_coplanar_planes(extracted);
+    remove_floor_planes(extracted);
+    //identify_floor_planes(extracted);
+    //rectify_normals(extracted);
+    compute_camera_ids(extracted, camera_ids);
+    //merge_coplanar_planes(extracted, camera_ids);
 }
