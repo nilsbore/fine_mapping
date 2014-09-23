@@ -85,6 +85,8 @@ add_executable(test_multiple_clouds src/test_multiple_clouds.cpp)
 add_executable(split_multiple_clouds src/split_multiple_clouds.cpp)
 add_executable(split_multiple_final src/split_multiple_final.cpp)
 add_executable(split_multiple_final2 src/split_multiple_final2.cpp)
+add_executable(pick_areas src/pick_areas.cpp)
+add_executable(area_graph src/area_graph.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -139,6 +141,18 @@ target_link_libraries(split_multiple_final2
   ${OpenCV_LIBS}
   refinement_core
   graph_extractor
+)
+
+target_link_libraries(area_graph
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBS}
+  refinement_core
+  graph_extractor
+)
+
+target_link_libraries(pick_areas
+  ${PCL_LIBRARIES}
 )
 
 #############

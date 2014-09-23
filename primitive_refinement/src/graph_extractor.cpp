@@ -5,13 +5,14 @@
 
 using namespace Eigen;
 
-graph_extractor::graph_extractor(const std::vector<base_primitive*>& primitives, std::vector<MatrixXd>& inliers, std::vector<std::vector<int> >& cameras, double adjacency_dist) :
-    primitives(primitives), cameras(cameras), adjacency_dist(adjacency_dist)
+graph_extractor::graph_extractor(const std::vector<base_primitive*>& primitives, std::vector<MatrixXd>& inliers,
+                                 std::vector<std::vector<int> >& cameras, double adjacency_dist, double inlier_distance) :
+    primitives(primitives), cameras(cameras), adjacency_dist(adjacency_dist), inlier_distance(inlier_distance)
 {
     connectedness_dist = 8.0; // assign very large if you want all-to-all connectedness
     std::vector<MatrixXd> sparse_inliers;
     sparse_inliers.resize(inliers.size());
-    int skip = 10;
+    int skip = 5;//5; // for 3x3
     for (int i = 0; i < inliers.size(); ++i) {
         int newsize = int(inliers[i].cols()) / skip;
         sparse_inliers[i].resize(3, newsize);
@@ -24,7 +25,17 @@ graph_extractor::graph_extractor(const std::vector<base_primitive*>& primitives,
 
 bool graph_extractor::do_share_camera(int i, int j)
 {
-    std::vector<int> intersection;
+    int top_dist_threshold = 1;
+    for (const int& iind : cameras[i]) {
+        for (const int& jind : cameras[j]) {
+            if (abs(iind - jind) <= top_dist_threshold) {
+                return true;
+            }
+        }
+    }
+    return false;
+
+    /*std::vector<int> intersection;
 
     // we could do this for all at the beginning instead
     std::sort(cameras[i].begin(), cameras[i].end());
@@ -32,7 +43,7 @@ bool graph_extractor::do_share_camera(int i, int j)
 
     std::set_intersection(cameras[i].begin(),cameras[i].end(),cameras[j].begin(),cameras[j].end(),std::back_inserter(intersection));
 
-    return !intersection.empty();
+    return !intersection.empty();*/
 }
 
 void graph_extractor::construct_adjacency_graph(std::vector<MatrixXd>& inliers)
@@ -197,7 +208,8 @@ double graph_extractor::floor_distance(const MatrixXd& inliers, bool is_plane)
     double mincol;
     for (int i = 0; i < inliers.cols(); ++i) {
         temp = inliers.col(i);
-        mincol = fabs(temp(2));
+        mincol = fabs(temp(2)) - inlier_distance;
+        mincol = mincol < 0? 0.0 : mincol;
         if (mincol < adjacency_dist) {
             return mincol; // SPEEDUP
         }

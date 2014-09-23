@@ -129,6 +129,7 @@ protected:
     graph g;
     double adjacency_dist;
     double connectedness_dist;
+    double inlier_distance;
     std::vector<base_primitive*> primitives;
     std::vector<std::vector<int> > cameras;
     void construct_adjacency_graph(std::vector<Eigen::MatrixXd>& inliers);
@@ -140,7 +141,7 @@ protected:
 public:
     void generate_dot_file(const std::string& filename);
     void generate_index_file(const std::string& filename);
-    graph_extractor(const std::vector<base_primitive*>& primitives, std::vector<Eigen::MatrixXd>& inliers, std::vector<std::vector<int> >& cameras, double adjacency_dist);
+    graph_extractor(const std::vector<base_primitive*>& primitives, std::vector<Eigen::MatrixXd>& inliers, std::vector<std::vector<int> >& cameras, double adjacency_dist, double inlier_distance = 0.15);
 };
 
 #endif // GRAPH_EXTRACTOR_H
